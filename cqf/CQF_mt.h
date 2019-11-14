@@ -348,8 +348,8 @@ struct seqFile_batch{
     while(this->num_files){
       if (this->ip_files.pop(fp)) {
         if (fastq_read_parts(fp->fmode, fp)) {
+          data.set(fp->part, fp->size); //assign the pointer, instead of copy the data
           this->ip_files.push(fp);
-          data.set(fp->part, fp->size);
           return true;
         }else{
           /* close the file */
@@ -444,7 +444,11 @@ public:
   uint64_t count(uint64_t key){
     return qf_count_key_value(qf, key, default_value);
   }
- 
+  
+  void reset_iterator(){
+    qf_iterator(qf, &qfi, 0);
+  }
+  
   bool set_iterator_2pos(uint64_t pos){
     return qf_iterator(qf, &qfi, pos);
   }
@@ -480,7 +484,7 @@ public:
   bool next_untraveled(){
     return qfi_next_untraveled(&qfi)?false:true;
   }
-  //return whether it is traveled before setting
+  //return whether it is traveled(true) or untraveled(false) before setting
   bool count_key_value_set_traveled(uint64_t key, uint64_t& count){
     return qf_count_key_value_set_traveled(qf, key, default_value, &count);
   }

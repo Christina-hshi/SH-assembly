@@ -1432,7 +1432,8 @@ static inline bool insert1(QF *qf, __uint128_t hash, bool lock, bool spin)
 								shift_runends(qf, insert_index, empty_slot_index1-1, 2);
 								//METADATA_WORD(qf, runends, (insert_index+1)) &= ~(1ULL << (((insert_index+1)%SLOTS_PER_BLOCK)%64));
 							}
-							if(abs(runend_index-insert_index) < 2){
+							if((runend_index>insert_index?(runend_index-insert_index):(insert_index - runend_index)) < 2){
+							//if(abs(runend_index-insert_index) < 2){
 								METADATA_WORD(qf, runends, runend_index) &= ~(1ULL << ((runend_index%SLOTS_PER_BLOCK)%64));
 							}
 
@@ -1732,7 +1733,8 @@ static inline bool insert1_advance(QF *qf, __uint128_t hash, bool lock, bool spi
 								shift_runends(qf, insert_index, empty_slot_index1-1, 2);
 								//METADATA_WORD(qf, runends, (insert_index+1)) &= ~(1ULL << (((insert_index+1)%SLOTS_PER_BLOCK)%64));
 							}
-							if(abs(runend_index-insert_index) < 2){
+							//if(abs(runend_index-insert_index) < 2){
+							if((runend_index>insert_index?(runend_index-insert_index):(insert_index - runend_index)) < 2){
 								METADATA_WORD(qf, runends, runend_index) &= ~(1ULL << ((runend_index%SLOTS_PER_BLOCK)%64));
 							}
 
@@ -3068,15 +3070,15 @@ int qfi_next_untraveled(QFi * qfi){
 	return isEnd;
 }
 
-//return whether is traveled
-//and set it to be traveled
+//return whether is traveled (true) or not traveled (false)
+//and then set it to be traveled
 bool qf_count_key_value_set_traveled(const QF *qf, uint64_t key, uint64_t value, uint64_t* count){
 	__uint128_t hash = key;
 	uint64_t hash_remainder   = hash & BITMASK(qf->metadata->bits_per_slot);
 	int64_t hash_bucket_index = hash >> qf->metadata->bits_per_slot;
 
 	if (!is_occupied(qf, hash_bucket_index)){
-		count = 0;
+		*count = 0;
 		return false;
 	}
 
@@ -3104,7 +3106,7 @@ bool qf_count_key_value_set_traveled(const QF *qf, uint64_t key, uint64_t value,
 		runstart_index = current_end + 1;
 	} while (!is_runend(qf, current_end));
 
-	count = 0;
+	*count = 0;
 	return false;
 }
 
@@ -3116,7 +3118,7 @@ bool qf_count_key_value_is_traveled(const QF *qf, uint64_t key, uint64_t value, 
 	int64_t hash_bucket_index = hash >> qf->metadata->bits_per_slot;
 
 	if (!is_occupied(qf, hash_bucket_index)){
-		count = 0;
+		*count = 0;
 		return false;
 	}
 
@@ -3139,7 +3141,7 @@ bool qf_count_key_value_is_traveled(const QF *qf, uint64_t key, uint64_t value, 
 		runstart_index = current_end + 1;
 	} while (!is_runend(qf, current_end));
 
-	count = 0;
+	*count = 0;
 	return false;
 }
 

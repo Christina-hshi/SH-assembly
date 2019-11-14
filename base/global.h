@@ -18,7 +18,7 @@
 #include<stdexcept>
 #include<ctime>
 #include<cstdlib>
-#include<cmath>
+//#include<cmath>
 #include<cstring>
 #include<thread>
 #include<chrono>
@@ -27,6 +27,7 @@
 #include<algorithm>
 #include<limits>
 #include<numeric>
+#include<assert.h>
 //#include<malloc.h>
 //#include<malloc/malloc.h>
 //#include<stdlib.h>
@@ -80,9 +81,20 @@ typedef boost::tokenizer<boost::char_separator<char>> tokenizer;
 
 enum SEQ_LIB_TYPE{MP, PE, SE};
 
-//char DNA_bases[4] = {'A', 'C', 'G', 'T'};
+const char DNA_bases[4] = {'A', 'C', 'G','T'};
 
 const std::string currentDateTime();
+
+struct Contig
+{
+  string seq;
+  double median_abundance;//median abundances of k-mers in
+  Contig(string s="", double a=0){
+    seq = s;
+    median_abundance = a;
+  }
+};
+
 #if 0
 std::ostream& operator<<( std::ostream& dest, __int128_t value ){
   std::ostream::sentry s( dest );

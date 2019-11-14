@@ -14,6 +14,23 @@ typedef vector<double> vec_double;
 typedef vector<vector<int>> matrix_int;
 typedef vector<int> vec_int;
 
+/*Compute median from a vector of int
+*/
+double median(vector<int>& nums){
+  if(nums.size()==0){
+    return 0;
+  }else if(nums.size()==1){
+    return nums[0];
+  }
+  sort(nums.begin(), nums.end());
+  int tmp = nums.size()/2;
+  if(nums.size()%2==0){
+    return (nums[tmp-1]+nums[tmp])/2.0;  
+  }else{
+    return nums[tmp];
+  }
+}
+
 /** Get reverse complement of DNA sequence
 */
 inline string RC_DNA(const string seq){
@@ -887,6 +904,46 @@ inline void contig_summary(vector<string> contigs, int ref_len=4800000){
   int tmp_idx = 0;
   for(auto contig:contigs){
     contig_lens[tmp_idx] = contig.length();
+    total_len += contig_lens[tmp_idx];
+    tmp_idx++;
+  }
+
+  std::sort(contig_lens.rbegin(), contig_lens.rend());
+  int sum_tmp = 0;
+  for(auto len:contig_lens){
+    sum_tmp += len;
+    if(sum_tmp>=total_len/2){
+      N50 = len;
+      break;
+    }
+  }
+  
+  sum_tmp = 0;
+  for(auto len:contig_lens){
+    sum_tmp += len;
+    if(sum_tmp>=ref_len/2){
+      NG50 = len;
+      break;
+    }
+  }
+  cout<<endl<<"Contig statistics: "<<endl;
+  cout<<contig_num<<" contigs, "<<total_len<<" bp in total."<<endl;
+  cout<<"Min contig len "<<contig_lens.back()<<", max contig len "<<contig_lens.front()<<"."<<endl;
+  cout<<"Contig N50 "<<N50<<", contig NG50 "<<NG50<<endl;
+  return ;
+}
+
+inline void contig_summary(vector<Contig> contigs, int ref_len=4800000){
+  size_t contig_num = 0;
+  contig_num += contigs.size();
+  
+  int total_len = 0;
+  int NG50, N50; NG50 = N50 = 0;
+  vector<int> contig_lens(contig_num);
+
+  int tmp_idx = 0;
+  for(auto contig:contigs){
+    contig_lens[tmp_idx] = contig.seq.length();
     total_len += contig_lens[tmp_idx];
     tmp_idx++;
   }

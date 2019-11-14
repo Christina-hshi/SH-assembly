@@ -829,7 +829,7 @@ static bool fastq_to_uint64kmers_prod(flush_object* obj, seqFile_batch* seqFiles
         if (seqFiles->ip_files.pop(fp)) {
           if (fastq_read_parts(fp->fmode, fp)) {
             seqFiles->ip_files.push(fp);
-            chunk c(fp->part, fp->size);
+            chunk c(fp->part, fp->size);//assign pointer "part" to chunk, instead of copy the data.
             reads_to_kmers(c, obj);
             if (obj->count) {
               dump_local_qf_to_main(obj);
