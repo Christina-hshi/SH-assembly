@@ -5,6 +5,7 @@
 
 #include "global.h"
 #include "Hash.h"
+#include "DNA_string.h"
 
 using namespace std;
 
@@ -13,6 +14,21 @@ typedef vector<double> vec_double;
 
 typedef vector<vector<int>> matrix_int;
 typedef vector<int> vec_int;
+
+
+struct Contig
+{
+  DNAString seq;
+  double median_abundance;//median abundances of k-mers in
+  Contig(string s="", double a=0){
+    seq = s;
+    median_abundance = a;
+  }
+  Contig(DNAString s, double a=0){
+    seq = s;
+    median_abundance = a;
+  }
+};
 
 /*Compute median from a vector of int
 */

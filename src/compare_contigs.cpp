@@ -58,9 +58,12 @@ int main(int argc, char* argv[]){
     }
     seqs2.push_back(seq);
   }
-
   fin1.close();
   fin2.close();
+
+  //compare seqs in two sets by considering only exact match 
+
+
   fout.close();
 
   return 0;

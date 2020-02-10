@@ -6,11 +6,11 @@
 #include "base/vector_mt.h"
 #include "base/Params.h"
 #include "base/Hash.h"
+#include "base/DNA_string.h"
 //#include "base/nthash.h"
 #include <boost/iostreams/filter/gzip.hpp>
 #include <boost/iostreams/copy.hpp>
 #include <boost/iostreams/filtering_streambuf.hpp>
-
 #include <tbb/concurrent_unordered_set.h>
 #include <tbb/concurrent_vector.h>
 #include <tbb/concurrent_queue.h>
@@ -19,23 +19,56 @@
 using tbb::concurrent_vector;
 using tbb::concurrent_queue;
 
-struct str_hasher
-{
-    size_t operator()(const string& val)const
-    {
-        return MurmurHash2(val);
-    }
-};
+// struct DNAString_hasher
+// {
+//     size_t operator()(const DNAString& val)const //A is 00
+//     {
+//         return MurmurHash2(val.data(), val.length());
+//     }
+// };
 
-struct str_equalto 
-{
-    bool operator()(const string& one, const string& two) const
-    {
-        return (one == two);
-    }
-};
+namespace std{
+  template<>
+  struct hash<DNAString>
+  {
+     size_t operator () (const DNAString& x) const
+     {
+        //cout<<"hash being called"<<endl;
+        return MurmurHash2(x.data(), x.data_size());
+     }
+  };
 
-typedef tbb::concurrent_unordered_set<string, str_hasher, str_equalto> unordered_set_mt;
+  template<>
+  struct equal_to<DNAString>
+  {
+    bool operator()(const DNAString &lhs, const DNAString &rhs) const 
+    {
+        //cout<<"equal being called"<<endl;
+        return lhs == rhs;
+    }
+  };
+}
+
+namespace tbb{
+  template<>
+  struct tbb_hash<DNAString>
+  { 
+    size_t operator () (const DNAString& x) const
+     {
+        return MurmurHash2(x.data(), x.data_size());
+     }
+  };
+}
+// struct DNAString_equalto 
+// {
+//     bool operator()(const DNAString& one, const DNAString& two) const
+//     {
+//         return (one == two);
+//     }
+// };
+
+typedef tbb::concurrent_unordered_set<DNAString> unordered_set_mt;
+//typedef tbb::concurrent_unordered_set<DNAString, DNAString_hasher, DNAString_equalto> unordered_set_mt;
 //using namespace boost::program_options;
 //namespace po = boost::program_options;
 //using boost::program_options::variables_map;
@@ -49,7 +82,7 @@ Params get_opts(int argc, char* argv[]){
     ("input,i", po::value<string>()->required(), "a file containing list of input file name(s), should be absolute address or file names when in the running directory.")
     ("format,f", po::value<char>()->default_value('f'), "format of the input: g(gzip); b(bzip2); f(plain fastq)")
     ("cqf,c", po::value<string>()->required(), "the counting quotient filter built with the same 'k'")
-    ("abundance_min,s", po::value<int>()->default_value(2), "minimum coverage of k-mers used to extend the assembly") 
+    ("abundance_min,s", po::value<int>()->default_value(1), "minimum coverage of k-mers used to extend the assembly") 
     ("solid_abundance_min,x", po::value<int>()->default_value(2), "minimum coverage of a solid k-mer to start the assembly")
     ("solid_abundance_max,X", po::value<int>()->default_value(100), "maximum coverage of a solid k-mer to start the assembly")
     (",t", po::value<int>()->default_value(16), "number of threads")
@@ -117,6 +150,51 @@ void get_unitig_forward(CQF_mt& cqf, const Params& options, concurrent_vector<Co
 //void get_unitig_backward(CQF_mt& cqf, const Params& options, vector_mt<Contig>& contigs, unordered_map_mt<string, int>& startKmer2unitig, WorkQueue* work_queue, int contig_id);
 
 int main(int argc, char* argv[]){
+  // /*test of DNA string 
+  // */
+  // string tmp_s("ATGCAGGATGCAT");
+  // DNAString dna_seq = tmp_s;
+  // dna_seq.append('T');
+  // cout<<dna_seq<<endl;
+  // cout<<dna_seq.substr(0, 5)<<endl;
+  // cout<<dna_seq.substr(7,5)<<endl;
+  // if(dna_seq.substr(0,5) == dna_seq.substr(7,5)){
+  //   cout<<"Equal operator works"<<endl;
+  // }
+  // dna_seq.RC();
+  // cout<<dna_seq<<endl;
+  // //cout<<dna_seq<<endl;
+  // //cout<<dna_seq.dna_base_num()<<endl;
+  
+  // DNAString dna_seq = string("AAATT");
+  // cout<<dna_seq.is_palindrome()<<endl;
+  // cout<<dna_seq.is_hairpin()<<endl;
+  
+  // unordered_map<DNAString, int> kmerSet;
+  
+  // DNAString dna_seq = string("AAATTT");
+  
+  // char DNA_bases[4]={'A','C','G','T'};
+  // DNAString fix = dna_seq.substr(0, 5);
+  // DNAString dna_seq1;
+  // for(int x = 0; x < 4; x++){
+  //   dna_seq1 = dna_seq.substr(0,5).append(DNA_bases[x]);
+  //   kmerSet[dna_seq1]=0;
+  //   cout<<"Insert "<<dna_seq1<<endl;
+  // }
+
+  // for(int x = 0; x < 4; x++){
+  //   dna_seq1 = fix;
+  //   dna_seq1.append(DNA_bases[x]);
+  //   auto it = kmerSet.find(dna_seq1);
+  //   if(it != kmerSet.end()){
+  //     cout<<dna_seq1<<" found."<<endl;
+  //     cout<<it->first<<": "<<it->second<<endl;
+  //   }
+  // }
+  
+  // return 0;
+
   Params options = get_opts(argc, argv);
   
   vector<string> seqFileNames;
@@ -132,7 +210,7 @@ int main(int argc, char* argv[]){
   seqFile_batch seqFiles(seqFileNames, ftype, options.fmode);   
 
   DisplayCurrentDateTime(); 
-  cout<<"[CQF] loading cqf from disk"<<endl;
+  cout<<"[CQF] load cqf from disk"<<endl;
   CQF_mt cqf_mt;
   cqf_mt.load(options.cqfFile);
   cout<<"[CQF] cqf loaded!"<<endl;
@@ -151,25 +229,29 @@ int main(int argc, char* argv[]){
   // return 0;
 
   DisplayCurrentDateTime();
-  cout<<"[Unitig] constructing unitigs"<<endl;
+  cout<<"[Unitig] find unitigs"<<endl<<std::flush;
   concurrent_vector<Contig> contigs;
   contigs.resize(1);
   find_unitigs_mt_master(cqf_mt, seqFiles, options, contigs);
   
   //bulid the graph
+  cout<<"[Unitig] build compacted DBG graph with unitigs as nodes."<<endl<<std::flush;
   uint64_t totalUnitigs_len, duplicateUnitigs_len; totalUnitigs_len = duplicateUnitigs_len=0;
   int duplicateUnitig_num=0;
   auto contig_num = contigs.size();
-  unordered_map<string, int> startKmer2unitig(contig_num*2);
+  unordered_map<DNAString, int, std::hash<DNAString>> startKmer2unitig;
   vector<bool> isDuplicate(contig_num, false);
+  vector<bool> isHairpin(contig_num, false);//whether the non-duplicate unitigs are hairpin(Palindrome excluded).
   vector<int> id2id_afterRemoveDuplicate(contig_num, -1);
 
-  string first_kmer, last_kmer_RC;
+  DNAString first_kmer, last_kmer_RC;
   int noduplicate_contig_num=0;
+  int palindrome_contig_num, hairpin_contig_num;
+  palindrome_contig_num = hairpin_contig_num = 0;
   for(int contig_id = 1; contig_id<contigs.size(); contig_id++){
     totalUnitigs_len += contigs[contig_id].seq.length();
     first_kmer = contigs[contig_id].seq.substr(0,options.K);
-    last_kmer_RC = RC_DNA(contigs[contig_id].seq.substr(contigs[contig_id].seq.length()-options.K));
+    last_kmer_RC = contigs[contig_id].seq.substr(contigs[contig_id].seq.length()-options.K).RC();
     auto it = startKmer2unitig.find(first_kmer);
     if(it != startKmer2unitig.end()){
       // auto tmp = abs(it->second);
@@ -192,66 +274,118 @@ int main(int argc, char* argv[]){
       noduplicate_contig_num++;
       id2id_afterRemoveDuplicate[contig_id]=noduplicate_contig_num;
       if(first_kmer == last_kmer_RC){
+        if(contigs[contig_id].seq.is_palindrome()){
+          //cout<<"[Warning] contig "<<contig_id<<"("<<contigs[contig_id].seq.length()<<" bp) is a palindrome seq (+ and - strand): "<<contigs[contig_id].seq<<endl;
+          palindrome_contig_num++;
+          startKmer2unitig[first_kmer] = noduplicate_contig_num;
+        }else{//Hairpin is the seq where >= K bases at both ends are complementary, but no palindrome.
+          //cout<<"[Warning] contig "<<contig_id<<"("<<contigs[contig_id].seq.length()<<" bp) is a hairpin seq (+ and - strand): "<<contigs[contig_id].seq<<endl;
+          isHairpin[noduplicate_contig_num] = true;
+          hairpin_contig_num++;
+          startKmer2unitig[first_kmer] = noduplicate_contig_num;
+        }
         //dont't know how to do  
-        cout<<"[Warning] contig "<<contig_id<<" seems like a palindrome seq (+ and - strand): "<<contigs[contig_id].seq<<endl;
+        //cout<<"[Warning] contig "<<contig_id<<" seems like a palindrome seq (+ and - strand): "<<contigs[contig_id].seq<<endl;
+      }else{
+        startKmer2unitig[first_kmer] = noduplicate_contig_num;
+        startKmer2unitig[last_kmer_RC] = -noduplicate_contig_num;
       }
-      startKmer2unitig[first_kmer] = noduplicate_contig_num;
-      startKmer2unitig[last_kmer_RC] = -noduplicate_contig_num;
     }
+
+    // if(startKmer2unitig.find(first_kmer) == startKmer2unitig.end()){
+    //   cerr<<"[error] why not found!"<<endl;
+    // }
+    // if(startKmer2unitig.find(last_kmer_RC) == startKmer2unitig.end()){
+    //   cerr<<"[error] why not found!"<<endl;
+    // }
   }
   cout<<"[Unitig] "<<contigs.size()<<" unitigs reported of length "<<totalUnitigs_len<<" bp in total"<<endl;
   cout<<"[Unitig] Among them, "<<duplicateUnitig_num<<" duplicate unitigs found of length "<<duplicateUnitigs_len<<" bp in total."<<endl;
   cout<<"[Unitig] After removing duplicates, we have "<<noduplicate_contig_num<<" unitigs of length "<<totalUnitigs_len- duplicateUnitigs_len<<" bp in total."<<endl;
+  cout<<"[Unitig] Among all non-duplicate unitigs, there are "<<palindrome_contig_num<<" palindromes among "<<hairpin_contig_num+palindrome_contig_num<<" hairpins."<<endl;
+  
   //check whether can reconstruct the full sequences from the graph.
-  // string refFile = "/public/hshi/tools/minia/test2/read50x_ref10K_e001.contigs.fa";
-  // ifstream refFin;
-  // refFin.open(refFile, ios::in);
-  // string refSeq="";
-  // getline(refFin, line);
-  // while(getline(refFin, line)){
-  //   refSeq += line;
-  // }
-  // to_upper_DNA(refSeq);
-  // cout<<"[Test] length of reference sequence: "<<refSeq.length()<<" bp."<<endl;
-  // int constructed_len=0;
-  // string kmer=refSeq.substr(0,options.K);
-  // while(true){
-  //   auto it = startKmer2unitig.find(kmer);
-  //   if(it == startKmer2unitig.end()){
-  //     cout<<"[Test] kmer not found: "<<kmer<<endl;
-  //     cout<<"[Test] last kmer in the traversed sequence: "<<refSeq.substr(constructed_len-1, options.K)<<endl;
-  //     cout<<"[Test] traversal of reference seq broken at "<<constructed_len+options.K-1<<endl;
-  //     break;
+  // if(true){
+  //   string refFile = "/public/hshi/tools/SH-assembly/test/case1/genome10K.fasta";
+  //   ifstream refFin;
+  //   refFin.open(refFile, ios::in);
+  //   string refSeq="";
+  //   getline(refFin, line);
+  //   while(getline(refFin, line)){
+  //     refSeq += line;
   //   }
-  //   //get the real ID
-  //   auto id = abs(it->second);
-  //   while(id2id_afterRemoveDuplicate[id] < abs(it->second)){
-  //     id++;
-  //   }
-  //   constructed_len += (contigs[id].seq.length() - options.K +1);
-  //   cout<<"[Test] find kmer: "<<kmer<<" in contig "<<it->second<<" of length "<<contigs[id].seq.length()<<" bp."<<endl;
-  //   cout<<"[Test] contig "<< it->second<<": ";
-  //   if(it->second < 0)
-  //     cout<<RC_DNA(contigs[id].seq);
-  //   else
-  //     cout<<contigs[id].seq;
-  //   cout<<" median_abundance: "<<contigs[id].median_abundance<<endl;
+  //   to_upper_DNA(refSeq);
+  //   cout<<"[Test] length of reference sequence: "<<refSeq.length()<<" bp."<<endl;
+  //   int constructed_len=0;
+  //   DNAString kmer=refSeq.substr(0,options.K);
+  //   // while(true){
+  //   //   auto it = startKmer2unitig.find(kmer);
+  //   //   if(it == startKmer2unitig.end()){
+  //   //     cout<<"[Test] kmer not found: "<<kmer<<endl;  
+  //   //     if(constructed_len != 0){
+  //   //       cout<<"[Test] last kmer in the traversed sequence: "<<refSeq.substr(constructed_len-1, options.K)<<endl;
+  //   //       cout<<"[Test] traversal of reference seq broken at "<<constructed_len+options.K-1<<endl;
+  //   //     }
+  //   //     break;
+  //   //   }
+  //   //   //get the real ID
+  //   //   auto id = abs(it->second);
+  //   //   while(id2id_afterRemoveDuplicate[id] < abs(it->second)){
+  //   //     id++;
+  //   //   }
+  //   //   constructed_len += (contigs[id].seq.length() - options.K +1);
+  //   //   cout<<"[Test] find kmer: "<<kmer<<" in contig "<<it->second<<" of length "<<contigs[id].seq.length()<<" bp."<<endl;
+  //   //   cout<<"[Test] contig "<< it->second<<": ";
+  //   //   if(it->second < 0)
+  //   //     cout<<contigs[id].seq.get_RC();
+  //   //   else
+  //   //     cout<<contigs[id].seq;
+  //   //   cout<<" median_abundance: "<<contigs[id].median_abundance<<endl;
+  //   //   kmer = refSeq.substr(constructed_len, options.K);
+  //   //   if(constructed_len+options.K-1 >= refSeq.length()){
+  //   //     cout<<"[Test] reference seq is encoded in the DBG of unitigs"<<endl;
+  //   //     break;
+  //   //   }
+  //   // }
+
+  //   //check whether k-mer are in the CQF with proper coverage
   //   kmer = refSeq.substr(constructed_len, options.K);
-  //   if(constructed_len+options.K-1 >= refSeq.length()){
-  //     cout<<"[Test] reference seq is encoded in the DBG of unitigs"<<endl;
-  //     break;
+  //   uint64_t kmer_hash, kmer_RC_hash, kmer_count;
+  //   kmer_hash = NTPC64(kmer, options.K, kmer_hash, kmer_RC_hash);
+  //   kmer_count = cqf_mt.count(kmer_hash%cqf_mt.qf->metadata->range);
+  //   cout<<"[Test] count: "<<kmer_count<<" of kmer: "<<kmer<<endl;
+  // }
+  
+  //output all kmers
+  // for(auto ele : startKmer2unitig){
+  //   cout<<ele.first<<":"<<ele.second<<endl;
+  // }
+  // for(int contig_id = 1; contig_id < 2; contig_id++){
+  //   cout<<"Contig "<<contig_id<<":"<<contigs[contig_id].seq<<endl;
+  //   if(isDuplicate[contig_id]){
+  //     continue;
+  //   }
+  //   DNAString first_kmer = contigs[contig_id].seq.substr(0,options.K);
+  //   DNAString last_kmer_RC = contigs[contig_id].seq.substr(contigs[contig_id].seq.length()-options.K).RC();
+  //   if(startKmer2unitig.find(first_kmer) == startKmer2unitig.end()){
+  //     cerr<<"[error] why not found: "<<first_kmer<<endl;
+  //     for(auto ele : startKmer2unitig){
+  //       if(ele.first == first_kmer){
+  //         cerr<<"[error] Hmmm..."<<endl;
+  //       }
+  //     }
+  //   }else{
+  //     cerr<<"[error] "<<startKmer2unitig.find(first_kmer)->first<<endl;
+  //   }
+  //   if(startKmer2unitig.find(last_kmer_RC) == startKmer2unitig.end()){
+  //     cerr<<"[error] why not found!"<<endl;
   //   }
   // }
-  // //check whether k-mer are in the CQF with proper coverage
-  // kmer = refSeq.substr(constructed_len, options.K);
-  // uint64_t kmer_hash, kmer_RC_hash, kmer_count;
-  // kmer_hash = NTPC64(kmer.c_str(), options.K, kmer_hash, kmer_RC_hash);
-  // kmer_count = cqf_mt.count(kmer_hash%cqf_mt.qf->metadata->range);
-  // cout<<"[Test] count: "<<kmer_count<<" of kmer: "<<kmer<<endl;
 
   //output graph
   ofstream fout;
-  string header, seq, kmer_fix, kmer;
+  string header, seq;
+  DNAString kmer_fix, kmer;
   char bases[4]={'A','C','G','T'};
   fout.open(options.output, ios::out);
   for(int contig_id = 1; contig_id<contigs.size(); contig_id++){
@@ -259,14 +393,18 @@ int main(int argc, char* argv[]){
       continue;
     }
     fout<<">"<<(id2id_afterRemoveDuplicate[contig_id]-1)<<" LN:i:"<<contigs[contig_id].seq.length()<<" KC:i:"<<contigs[contig_id].median_abundance*(contigs[contig_id].seq.length()-options.K+1)<<" km:f:"<<contigs[contig_id].median_abundance;
-    kmer_fix=contigs[contig_id].seq.substr(contigs[contig_id].seq.length()-options.K+1);
+    kmer_fix=contigs[contig_id].seq.substr(contigs[contig_id].seq.length()-options.K+1, options.K-1);
+
     for(int x=0; x<4; x++){
-      kmer = kmer_fix+bases[x];
+      kmer = kmer_fix; kmer.append(bases[x]);
       auto it = startKmer2unitig.find(kmer);
       if(it != startKmer2unitig.end()){
         auto tmp = it->second;
         if(tmp>0){
           fout<<" L:+:"<<tmp-1<<":+";
+          if(isHairpin[tmp]){
+            fout<<" L:+:"<<tmp-1<<":-";
+          }
         }else{
           fout<<" L:+:"<<-tmp-1<<":-";
         }
@@ -274,14 +412,17 @@ int main(int argc, char* argv[]){
         continue;
       }
     }
-    kmer_fix=RC_DNA(contigs[contig_id].seq.substr(0,options.K-1));
+    kmer_fix=contigs[contig_id].seq.substr(0, options.K-1).RC();
     for(int x=0; x<4; x++){
-      kmer = kmer_fix+bases[x];
+      kmer = kmer_fix; kmer.append(bases[x]);
       auto it = startKmer2unitig.find(kmer);
       if(it != startKmer2unitig.end()){
         auto tmp = it->second;
         if(tmp>0){
           fout<<" L:-:"<<tmp-1<<":+";
+          if(isHairpin[tmp]){
+            fout<<" L:-:"<<tmp-1<<":-";
+          }
         }else{
           fout<<" L:-:"<<-tmp-1<<":-";
         }
@@ -604,7 +745,7 @@ void processDataChunk(CQF_mt& cqf, const Params& options, concurrent_vector<Cont
       startKmers.insert(kmer);//fake id 
 
       get_unitig_forward(cqf, options, contigs, startKmers, work_queue, iter);
-      iter->seq = RC_DNA(iter->seq);
+      iter->seq.RC();
       get_unitig_forward(cqf, options, contigs, startKmers, work_queue, iter);
     }
     //skip two lines
@@ -671,7 +812,7 @@ void find_unitigs_mt_master(CQF_mt& cqf, seqFile_batch& seqFiles, const Params& 
         //work_queue->add_skip_work(1);
         auto iter = contigs.push_back(Contig(kmer, kmer_count));
         //startKmer2unitig.insert_mt(kmer, contig_id); //may not be the start k-mer
-        startKmers.insert(kmer);//fake id 
+        startKmers.insert(DNAString(kmer));//fake id 
         //startKmer2unitig.insert_mt(kmer_RC, -contig_id); //may not be the end k-mer
         // Contig master_contig(kmer, kmer_count);
         // get_unitig_forward(cqf, options, contigs, startKmer2unitig, work_queue, master_contig);
@@ -682,7 +823,7 @@ void find_unitigs_mt_master(CQF_mt& cqf, seqFile_batch& seqFiles, const Params& 
         //break;
         get_unitig_forward(cqf, options, contigs, startKmers, work_queue, iter);
         //contigs.set(contig_id, Contig(RC_DNA(contigs[contig_id].seq), contigs[contig_id].median_abundance));
-        iter->seq = RC_DNA(iter->seq);
+        iter->seq.RC();
         get_unitig_forward(cqf, options, contigs, startKmers, work_queue, iter);
         //get_unitig_backward(cqf, options, contigs, startKmer2unitig, work_queue, contig_id);
 
@@ -718,6 +859,7 @@ void find_unitigs_mt_master(CQF_mt& cqf, seqFile_batch& seqFiles, const Params& 
   prod_threads.join_all();
 
   //contigs.insert(contigs.end(), master_contigs.begin(), master_contigs.end());
+  startKmers.clear();
 }
 
 /*
@@ -1392,18 +1534,20 @@ void get_unitig_forward(CQF_mt& cqf, const Params& options, concurrent_vector<Co
   int candidates_before_num, candidates_after_num;
   int nodes_before_num, nodes_after_num;
   uint64_t kmer_hash, kmer_RC_hash, current_kmer_hash, current_kmer_RC_hash;
-  string kmer, kmer_RC, current_kmer, current_kmer_RC, current_kmer_fix;
+  DNAString kmer, kmer_RC, current_kmer, current_kmer_RC, current_kmer_fix;
   uint64_t kmer_count, kmer_RC_count;
   int idx;
   
-  string contig_seq = contigIter->seq;
+  DNAString& contig_seq = contigIter->seq;
+  //string contig_seq = contigIter->seq.to_str();
   current_kmer = contig_seq.substr(contig_seq.length()-K);
-  current_kmer_RC = RC_DNA(current_kmer);
+  current_kmer_RC = current_kmer.get_RC();
 
   std::vector<int> abundances;
   abundances.push_back(int(contigIter->median_abundance));
 
-  NTPC64(current_kmer.c_str(), K, current_kmer_hash, current_kmer_RC_hash);
+  //NTPC64(current_kmer.c_str(), K, current_kmer_hash, current_kmer_RC_hash);
+  NTPC64(current_kmer, K, current_kmer_hash, current_kmer_RC_hash);
   int node_after_x, node_before_x;//useful only when there is only one node after and without candidates after.
   while(true){
     //NTPC64(current_kmer.c_str(), K, current_kmer_hash, current_kmer_RC_hash);
@@ -1451,7 +1595,7 @@ void get_unitig_forward(CQF_mt& cqf, const Params& options, concurrent_vector<Co
       //kmer_hash = current_kmer_hash; kmer_RC_hash = current_kmer_RC_hash;
       //kmer_hash = NTPC64(current_kmer_RC[0], DNA_bases[x], K, kmer_hash, kmer_RC_hash);
       //kmer = current_kmer_RC;
-      kmer[K-1] = DNA_bases[x];
+      kmer.replace(K-1, DNA_bases[x]);
       kmer_hash = current_kmer_hash; kmer_RC_hash = current_kmer_RC_hash;
       kmer_hash = NTPC64('T', DNA_bases[x], options.K, kmer_RC_hash, kmer_hash);
       //kmer_hash = NTPC64(kmer.c_str(), K, kmer_hash, kmer_RC_hash);
@@ -1482,7 +1626,7 @@ void get_unitig_forward(CQF_mt& cqf, const Params& options, concurrent_vector<Co
       // }
       startKmers.insert(current_kmer_RC);
       //contigs.set_mt(contig_id, Contig(contig_seq, median(abundances)));
-      contigIter->seq = contig_seq;
+      //contigIter->seq = contig_seq;
       contigIter->median_abundance = median(abundances);
 
       for(int x= 0; x < 4; x++){
@@ -1498,7 +1642,7 @@ void get_unitig_forward(CQF_mt& cqf, const Params& options, concurrent_vector<Co
       kmer = current_kmer_RC;
       for(int x = 0; x < 4; x++){
         if(candidates_before[x]){
-          kmer[K-1] = DNA_bases[x];
+          kmer.replace(K-1, DNA_bases[x]);
           if(startKmers.find(kmer) == startKmers.end()){
             startKmers.insert(kmer);
             auto it = contigs.push_back(Contig(kmer, kmer_abundance_befores[x]));
@@ -1530,7 +1674,7 @@ void get_unitig_forward(CQF_mt& cqf, const Params& options, concurrent_vector<Co
       NTPC64('T', DNA_bases[node_after_x], options.K, current_kmer_hash, current_kmer_RC_hash);
     }else{ //stop
       startKmers.insert(current_kmer_RC);
-      contigIter->seq = contig_seq;
+      //contigIter->seq = contig_seq;
       contigIter->median_abundance = median(abundances);
       //contigs.set_mt(contig_id, Contig(contig_seq, median(abundances)));
       break;

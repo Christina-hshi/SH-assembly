@@ -47,6 +47,7 @@ using std::cin;
 using std::cout;
 using std::endl;
 using std::string;
+using std::ostream;
 using std::ifstream;
 using std::ofstream;
 using std::fstream;
@@ -85,15 +86,6 @@ const char DNA_bases[4] = {'A', 'C', 'G','T'};
 
 const std::string currentDateTime();
 
-struct Contig
-{
-  string seq;
-  double median_abundance;//median abundances of k-mers in
-  Contig(string s="", double a=0){
-    seq = s;
-    median_abundance = a;
-  }
-};
 
 #if 0
 std::ostream& operator<<( std::ostream& dest, __int128_t value ){

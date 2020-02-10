@@ -17,7 +17,7 @@
 // 2. It will not produce the same results on little-endian and big-endian
 //    machines.    */
 
-uint32_t MurmurHash2 ( const void * key, int len, uint32_t seed )
+uint32_t MurmurHash2 ( const void * key, int len, uint32_t seed=0 )
 {
   /* 'm' and 'r' are mixing constants generated offline.
      They're not really 'magic', they just happen to work well.  */
