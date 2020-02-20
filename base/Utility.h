@@ -28,6 +28,12 @@ struct Contig
     seq = s;
     median_abundance = a;
   }
+  void clear(){
+    seq.clear();
+  }
+  bool is_empty() const{
+    return (seq.length() == 0);
+  }
 };
 
 /*Compute median from a vector of int

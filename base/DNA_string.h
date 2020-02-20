@@ -4,6 +4,7 @@
 #include "nthash.hpp"
 
 namespace DNA{
+	const char bases[4]={'A', 'C', 'G', 'T'};
 	//Map bases to 2 bit representation: A|a:00; C|c:01; G|g:10; T|t:11; N|n:arbitrary.
 	//Every 8 bits store 4 bases.
 	const uint8_t base_mask[4]={0xC0, 0x30, 0x0C, 0x03};
@@ -331,6 +332,43 @@ public:
 			}
 		}
 		return true;
+	}
+
+	//return true if kmer satisfy (A|T|G|C)*
+	bool is_simple() const{
+		assert(this->_data.size()>0);
+
+		uint8_t repeats[4] = {0x00, 0x55, 0xAA, 0xFF};
+		size_t block_num = this->_data.size();
+		if(block_num==1){
+			for(int x=0; x < 4; x++){
+				if(!((repeats[x] ^ this->_data[0]) >> (this->_offset+2))){
+					return true;
+				}
+			}
+		}else{
+			int pattern_idx = 0;
+			bool flag=false;
+			for(; pattern_idx<4; pattern_idx++){
+				if(!(repeats[pattern_idx] ^ this->_data[0])){
+					flag=true;
+					break;
+				}
+			}
+			if(flag){
+				size_t block_idx=1;
+				while(block_idx < block_num-1){
+					if(repeats[pattern_idx] != this->_data[block_idx]){
+						return false;
+					}
+					block_idx++;
+				}
+				if(!((repeats[pattern_idx] ^ this->_data[block_idx]) >> (this->_offset+2))){
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	friend bool operator== (const DNAString& lhs, const DNAString& rhs);
