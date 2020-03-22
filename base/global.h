@@ -32,7 +32,7 @@
 //#include<malloc/malloc.h>
 //#include<stdlib.h>
 #include<queue>
-#include<atomic>
+//#include<atomic>
 #include<sys/resource.h>
 #include<sys/time.h>
 
@@ -41,6 +41,17 @@
 #include<boost/bimap.hpp>
 #include<boost/program_options.hpp>
 //#include "Config.h"
+#include <boost/iostreams/filter/gzip.hpp>
+#include <boost/iostreams/copy.hpp>
+#include <boost/iostreams/filtering_streambuf.hpp>
+#include <boost/atomic.hpp>
+
+#include <tbb/concurrent_unordered_set.h>
+#include <tbb/concurrent_unordered_map.h>
+#include <tbb/concurrent_vector.h>
+#include <tbb/concurrent_queue.h>
+#include <tbb/concurrent_hash_map.h>
+//#include "tbb/atomic.h"
 
 //modules used as default in this project
 using std::cin;
@@ -81,6 +92,10 @@ typedef vector<string> vec_str;
 typedef boost::tokenizer<boost::char_separator<char>> tokenizer;
 
 enum SEQ_LIB_TYPE{MP, PE, SE};
+enum CQF_MODE{EMPTY, FILEMAP, MEMORY};
+enum FILE_TYPE{FASTA, FASTQ};
+enum FILE_MODE{TEXT, GZIP, BZIP2};  
+
 
 const char DNA_bases[4] = {'A', 'C', 'G','T'};
 

@@ -1,5 +1,35 @@
 #include "Utility.h"
 
+size_t NGx(vector<size_t> seq_lens, int x, int ref_len){
+  std::sort(seq_lens.rbegin(), seq_lens.rend());
+  size_t cutoff_len = ref_len * x / 100;
+  size_t current_sum, result;
+  current_sum = 0;
+  for(auto len : seq_lens){
+    current_sum += len;
+    if(current_sum >= cutoff_len){
+      result = len;
+      break;
+    }
+  }
+  return result;
+}
+
+double median(vector<int>& nums){
+  if(nums.size()==0){
+    return 0;
+  }else if(nums.size()==1){
+    return nums[0];
+  }
+  sort(nums.begin(), nums.end());
+  int tmp = nums.size()/2;
+  if(nums.size()%2==0){
+    return (nums[tmp-1]+nums[tmp])/2.0;  
+  }else{
+    return nums[tmp];
+  }
+}
+
 double semi_global_align(string seq_A, string seq_B){
   double match_score = 1;
   double mismatch_score = -1, gap_penalty = -1;

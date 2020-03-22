@@ -16,15 +16,19 @@ typedef vector<vector<int>> matrix_int;
 typedef vector<int> vec_int;
 
 
-struct Contig
-{
+class Contig{
+public:
   DNAString seq;
-  double median_abundance;//median abundances of k-mers in
-  Contig(string s="", double a=0){
+  //tbb::atomic<int> median_abundance;//median abundances of k-mers in
+  int median_abundance;
+  Contig(const Contig& c):seq(c.seq), median_abundance(c.median_abundance){
+    // median_abundance = c.median_abundance.load(std::memory_order_relaxed);
+  }
+  Contig(string s="", int a=0){
     seq = s;
     median_abundance = a;
   }
-  Contig(DNAString s, double a=0){
+  Contig(DNAString s, int a=0){
     seq = s;
     median_abundance = a;
   }
@@ -34,24 +38,16 @@ struct Contig
   bool is_empty() const{
     return (seq.length() == 0);
   }
+  Contig& operator=(const Contig& x){
+    this->seq = x.seq;
+    this->median_abundance = x.median_abundance;//.load(std::memory_order_relaxed);
+    return *this;
+  }
 };
 
 /*Compute median from a vector of int
 */
-double median(vector<int>& nums){
-  if(nums.size()==0){
-    return 0;
-  }else if(nums.size()==1){
-    return nums[0];
-  }
-  sort(nums.begin(), nums.end());
-  int tmp = nums.size()/2;
-  if(nums.size()%2==0){
-    return (nums[tmp-1]+nums[tmp])/2.0;  
-  }else{
-    return nums[tmp];
-  }
-}
+double median(vector<int>& nums);
 
 /** Get reverse complement of DNA sequence
 */
@@ -964,7 +960,7 @@ inline void contig_summary(vector<Contig> contigs, int ref_len=4800000){
   vector<int> contig_lens(contig_num);
 
   int tmp_idx = 0;
-  for(auto contig:contigs){
+  for(auto& contig:contigs){
     contig_lens[tmp_idx] = contig.seq.length();
     total_len += contig_lens[tmp_idx];
     tmp_idx++;
@@ -994,3 +990,5 @@ inline void contig_summary(vector<Contig> contigs, int ref_len=4800000){
   cout<<"Contig N50 "<<N50<<", contig NG50 "<<NG50<<endl;
   return ;
 }
+
+size_t NGx(vector<size_t> seq_lens, int x, int ref_len=4800000);

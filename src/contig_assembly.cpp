@@ -1,87 +1,7 @@
 #define GRAPH_TRAVERSE
 
 #include "cqf/CQF_mt.h"
-#include "base/Utility.h"
-#include "base/unordered_map_mt.h"
-#include "base/vector_mt.h"
-#include "base/Params.h"
-#include "base/Hash.h"
-#include "base/DNA_string.h"
-//#include "base/nthash.h"
-#include <boost/iostreams/filter/gzip.hpp>
-#include <boost/iostreams/copy.hpp>
-#include <boost/iostreams/filtering_streambuf.hpp>
-#include <tbb/concurrent_unordered_set.h>
-#include <tbb/concurrent_unordered_map.h>
-#include <tbb/concurrent_vector.h>
-#include <tbb/concurrent_queue.h>
-#include <tbb/concurrent_hash_map.h>
-
-//using namespace tbb;
-using tbb::concurrent_vector;
-using tbb::concurrent_queue;
-
-// struct DNAString_hasher
-// {
-//     size_t operator()(const DNAString& val)const //A is 00
-//     {
-//         return MurmurHash2(val.data(), val.length());
-//     }
-// };
-
-namespace std{
-  template<>
-  struct hash<DNAString>
-  {
-     size_t operator () (const DNAString& x) const
-     {
-        //cout<<"hash being called"<<endl;
-        return MurmurHash2(x.data(), x.data_size());
-     }
-  };
-
-  template<>
-  struct equal_to<DNAString>
-  {
-    bool operator()(const DNAString &lhs, const DNAString &rhs) const 
-    {
-        //cout<<"equal being called"<<endl;
-        return lhs == rhs;
-    }
-  };
-}
-
-namespace tbb{
-  template<>
-  struct tbb_hash<DNAString>
-  { 
-    size_t operator () (const DNAString& x) const
-     {
-        return MurmurHash2(x.data(), x.data_size());
-     }
-  };
-}
-
-struct MyHashCompare {
-    static size_t hash( const DNAString& x ) {
-      return MurmurHash2(x.data(), x.data_size());
-    }
-    //! True if strings are equal
-    static bool equal( const DNAString& x, const DNAString& y ) {
-        return x==y;
-    }
-};
-// struct DNAString_equalto 
-// {
-//     bool operator()(const DNAString& one, const DNAString& two) const
-//     {
-//         return (one == two);
-//     }
-// };
-
-typedef tbb::concurrent_unordered_set<DNAString> unordered_set_mt;
-//typedef tbb::concurrent_unordered_map<DNAString, int> unordered_map_mt;
-typedef tbb::concurrent_hash_map<DNAString, int, MyHashCompare> hash_map_mt;
+#include "core/unitig_graph.h"
 
 //typedef tbb::concurrent_unordered_set<DNAString, DNAString_hasher, DNAString_equalto> unordered_set_mt;
 //using namespace boost::program_options;
@@ -97,9 +17,10 @@ Params get_opts(int argc, char* argv[]){
     ("input,i", po::value<string>()->required(), "a file containing list of input file name(s), should be absolute address or file names when in the running directory.")
     ("format,f", po::value<char>()->default_value('f'), "format of the input: g(gzip); b(bzip2); f(plain fastq)")
     ("cqf,c", po::value<string>()->required(), "the counting quotient filter built with the same 'k'")
-    ("abundance_min,s", po::value<int>()->default_value(1), "minimum coverage of k-mers used to extend the assembly") 
+    ("abundance_min,s", po::value<int>()->default_value(2), "minimum coverage of k-mers used to extend the assembly") 
     ("solid_abundance_min,x", po::value<int>()->default_value(2), "minimum coverage of a solid k-mer to start the assembly")
-    ("solid_abundance_max,X", po::value<int>()->default_value(100), "maximum coverage of a solid k-mer to start the assembly")
+    ("solid_abundance_max,X", po::value<int>()->default_value(1000000), "maximum coverage of a solid k-mer to start the assembly")
+    //("dis_deviation_max,d", po::value<int>()->default_value(10), "contigs are connected if the inner distance between them is less than (distance suggested by aligned read) + dis_deviation_max.")
     (",t", po::value<int>()->default_value(16), "number of threads")
     ("output,o", po::value<string>()->default_value("unitigs.fa"), "output contig file name (fasta)");
     
@@ -120,6 +41,7 @@ Params get_opts(int argc, char* argv[]){
   options.kmer_abundance_min = vm["abundance_min"].as<int>();
   options.solid_kmer_abundance_min = vm["solid_abundance_min"].as<int>();
   options.solid_kmer_abundance_max = vm["solid_abundance_max"].as<int>();
+  //options.dis_deviation_max = vm["dis_deviation_max"].as<int>();
   options.thread_num = vm["-t"].as<int>();
   options.output = vm["output"].as<string>();
   switch(vm["format"].as<char>()){
@@ -136,7 +58,7 @@ Params get_opts(int argc, char* argv[]){
       std::cerr<<"[Error] unrecognized file format "<<vm["format"].as<char>()<<endl;
       break;
   }
-
+  cout<<options;
   return options;
 }
 
@@ -219,11 +141,7 @@ public:
     return true;
   }
 };
-struct UnitigNode{
-  vector<int> beforeNodes;
-  vector<int> afterNodes;
-  UnitigNode(){}
-};
+
 //void find_unitigs_mt_master(CQF_mt& cqf, const vector<string>& seqFiles, const Params& params, vector_mt<string>& contigs);
 //void find_unitigs_mt_master(CQF_mt& cqf, seqFile_batch& seqFiles, const Params& options, vector_mt<Contig>& unitigs);
 //void find_unitigs_mt_master(CQF_mt& cqf, seqFile_batch& seqFiles, const Params& options, concurrent_vector<Contig>& unitigs);
@@ -251,15 +169,21 @@ void get_unitig_forward(CQF_mt& cqf, const Params& options, concurrent_vector<Co
 //void get_unitig_backward(CQF_mt& cqf, const Params& options, vector_mt<Contig>& contigs, unordered_map_mt<string, int>& startKmer2unitig, WorkQueue* work_queue, int contig_id);
 
 void track_kmer_worker(const Params& options, const concurrent_vector<Contig>& contigs, hash_map_mt& startKmer2unitig, WorkQueue2* work_queue);
-void build_graph_worker(const Params& options, const concurrent_vector<Contig>& contigs, const hash_map_mt& startKmer2unitig, vector<UnitigNode>& unitigNodes, WorkQueue2* work_queue);
+void build_graph_worker(const Params& options, const concurrent_vector<Contig>& contigs, const hash_map_mt& startKmer2unitig, concurrent_vector<UnitigNode>& unitigNodes, WorkQueue2* work_queue);
+void build_graph_worker_continue(const Params& options, const concurrent_vector<Contig>& contigs, const hash_map_mt& startKmer2unitig, concurrent_vector<UnitigNode>& unitigNodes, WorkQueue2* work_queue, const int& last_batch_end_idx);
+
+void extend_worker(seqFile_batch& seqFiles, const Params& options, concurrent_vector<Contig>& contigs, hash_map_mt& startKmer2unitig, concurrent_vector<UnitigNode>& unitigNodes, concurrent_vector<Contig>& more_contigs, hash_map_mt& more_startKmer2contigs);
 
 int main(int argc, char* argv[]){
   // /*test of DNA string 
-  // */
-  // string tmp_s("ATGCAGGATGCAT");
+  if(false){
+  // string tmp_s("ATGC");
   // DNAString dna_seq = tmp_s;
+  // cout<<tmp_s<<endl;
+  // cout<<dna_seq.pop()<<endl;
   // dna_seq.append('T');
   // cout<<dna_seq<<endl;
+  // return 0;
   // cout<<dna_seq.substr(0, 5)<<endl;
   // cout<<dna_seq.substr(7,5)<<endl;
   // if(dna_seq.substr(0,5) == dna_seq.substr(7,5)){
@@ -302,8 +226,8 @@ int main(int argc, char* argv[]){
   //   DNAString dna = string(seq);
   //   cout<<dna<<" is simple "<<dna.is_simple()<<endl;
   // }
-
-  // return 0;
+    return 0;
+  }
 
   Params options = get_opts(argc, argv);
   
@@ -319,24 +243,12 @@ int main(int argc, char* argv[]){
   FILE_TYPE ftype=FILE_TYPE::FASTQ;
   seqFile_batch seqFiles(seqFileNames, ftype, options.fmode);   
 
+//*
   DisplayCurrentDateTime(); 
   cout<<"[CQF] load cqf from disk"<<endl;
   CQF_mt cqf_mt;
   cqf_mt.load(options.cqfFile);
   cout<<"[CQF] cqf loaded!"<<endl;
-
-  // cout<<"[debug] Output information of the cqf"<<endl;
-  // cout<<"[debug] Number of elements: "<<cqf_mt.qf->metadata->nelts<<endl;
-  // cout<<"[debug] List first 10 elements....\n[debug] ";
-  // cqf_mt.reset_iterator();
-  // uint64_t key, count;
-  // for(int x = 0; x < 10; x++){
-  //   cqf_mt.get(key, count);
-  //   cout<<key<<":"<<count<<" ";
-  //   if(!cqf_mt.next()) break;
-  // }
-  // cout<<endl;
-  // return 0;
 
   DisplayCurrentDateTime();
   cout<<"[Unitig] find unitigs"<<endl<<std::flush;
@@ -345,378 +257,500 @@ int main(int argc, char* argv[]){
   hash_map_mt startKmer2unitig;
   find_unitigs_mt_master(cqf_mt, seqFiles, options, contigs, startKmer2unitig);
   
-  //bulid the graph
-  /*
-  if(true){
-    cout<<"[Unitig] build compacted DBG graph with unitigs as nodes."<<endl<<std::flush;
-    uint64_t totalUnitigs_len, duplicateUnitigs_len; totalUnitigs_len = duplicateUnitigs_len=0;
-    int duplicateUnitig_num=0;
-    auto contig_num = contigs.size();
-    unordered_map<DNAString, int, std::hash<DNAString>> startKmer2unitig;
-    vector<bool> isDuplicate(contig_num, false);
-    vector<bool> isHairpin(contig_num, false);//whether the non-duplicate unitigs are hairpin(Palindrome excluded).
-    vector<int> id2id_afterRemoveDuplicate(contig_num, -1);
-
-    DNAString first_kmer, last_kmer_RC;
-    int noduplicate_contig_num=0;
-    int palindrome_contig_num, hairpin_contig_num;
-    palindrome_contig_num = hairpin_contig_num = 0;
-    for(int contig_id = 1; contig_id<contigs.size(); contig_id++){
-      if(contigs[contig_id].seq.dna_base_num()==0){
-        isDuplicate[contig_id]=true;
-        continue;
-      }
-      totalUnitigs_len += contigs[contig_id].seq.length();
-      first_kmer = contigs[contig_id].seq.substr(0,options.K);
-      last_kmer_RC = contigs[contig_id].seq.substr(contigs[contig_id].seq.length()-options.K).RC();
-      auto it = startKmer2unitig.find(first_kmer);
-      if(it != startKmer2unitig.end()){
-        // auto tmp = abs(it->second);
-        // while(id2id_afterRemoveDuplicate[tmp] != abs(it->second)){
-        //     tmp++;
-        // }
-        
-        // cout<<"[Warning] contig "<<(it->second>0?tmp:-tmp)<<" and "<<contig_id<<" share sequences."<<endl;
-        // cout<<"[Warning] contig "<<(it->second>0?tmp:-tmp)<<": ";
-        // if(it->second < 0){
-        //   cout<<RC_DNA(contigs[tmp].seq)<<endl;
-        // }else{
-        //   cout<<contigs[tmp].seq<<endl;
-        // }
-        // cout<<"[Warning] contig "<<contig_id<<": "<<contigs[contig_id].seq<<endl;
-        duplicateUnitigs_len += contigs[contig_id].seq.length();
-        isDuplicate[contig_id]=true;
-        duplicateUnitig_num++;
-      }else{
-        noduplicate_contig_num++;
-        id2id_afterRemoveDuplicate[contig_id]=noduplicate_contig_num;
-        if(first_kmer == last_kmer_RC){
-          if(contigs[contig_id].seq.is_palindrome()){
-            //cout<<"[Warning] contig "<<contig_id<<"("<<contigs[contig_id].seq.length()<<" bp) is a palindrome seq (+ and - strand): "<<contigs[contig_id].seq<<endl;
-            palindrome_contig_num++;
-            startKmer2unitig[first_kmer] = noduplicate_contig_num;
-          }else{//Hairpin is the seq where >= K bases at both ends are complementary, but no palindrome.
-            //cout<<"[Warning] contig "<<contig_id<<"("<<contigs[contig_id].seq.length()<<" bp) is a hairpin seq (+ and - strand): "<<contigs[contig_id].seq<<endl;
-            isHairpin[noduplicate_contig_num] = true;
-            hairpin_contig_num++;
-            startKmer2unitig[first_kmer] = noduplicate_contig_num;
-          }
-          //dont't know how to do  
-          //cout<<"[Warning] contig "<<contig_id<<" seems like a palindrome seq (+ and - strand): "<<contigs[contig_id].seq<<endl;
-        }else{
-          startKmer2unitig[first_kmer] = noduplicate_contig_num;
-          startKmer2unitig[last_kmer_RC] = -noduplicate_contig_num;
-        }
-      }
-
-      // if(startKmer2unitig.find(first_kmer) == startKmer2unitig.end()){
-      //   cerr<<"[error] why not found!"<<endl;
-      // }
-      // if(startKmer2unitig.find(last_kmer_RC) == startKmer2unitig.end()){
-      //   cerr<<"[error] why not found!"<<endl;
-      // }
-    }
-    cout<<"[Unitig] "<<contigs.size()<<" unitigs reported of length "<<totalUnitigs_len<<" bp in total"<<endl;
-    cout<<"[Unitig] Among them, "<<duplicateUnitig_num<<" duplicate unitigs found of length "<<duplicateUnitigs_len<<" bp in total."<<endl;
-    cout<<"[Unitig] After removing duplicates, we have "<<noduplicate_contig_num<<" unitigs of length "<<totalUnitigs_len- duplicateUnitigs_len<<" bp in total."<<endl;
-    cout<<"[Unitig] Among all non-duplicate unitigs, there are "<<palindrome_contig_num<<" palindromes among "<<hairpin_contig_num+palindrome_contig_num<<" hairpins."<<endl;
+  WorkQueue2* work_queue4trace_kmer = new WorkQueue2(1, 10, 1);
+  boost::thread_group prod_threads;
+  for(int t = 0; t<options.thread_num; t++){
+    prod_threads.add_thread(new boost::thread(track_kmer_worker, boost::ref(options), boost::ref(contigs), boost::ref(startKmer2unitig), work_queue4trace_kmer));
   }
-  */
-
-  ///*
-  //if(false){
-    //cout<<"[Unitig] build compacted DBG graph with unitigs as nodes."<<endl;
-    uint64_t totalUnitigs_len, duplicateUnitigs_len; totalUnitigs_len = duplicateUnitigs_len=0;
-    int duplicateUnitig_num=0;
-    auto contig_num = contigs.size();
-    //unordered_map<DNAString, int, std::hash<DNAString>> startKmer2unitig;
-    //vector<bool> isDuplicate(contig_num, false);
-    //vector<bool> isHairpin(contig_num, false);//whether the non-duplicate unitigs are hairpin(Palindrome excluded).
-    //vector<int> id2id_afterRemoveDuplicate(contig_num, -1);
-
-    /*
-    DNAString first_kmer, last_kmer_RC;
-    int noduplicate_contig_num=0;
-    int palindrome_contig_num, hairpin_contig_num;
-    palindrome_contig_num = hairpin_contig_num = 0;
-    for(int contig_id = 1; contig_id<contigs.size(); contig_id++){
-      if(contigs[contig_id].seq.dna_base_num()==0){
-        continue;
-      }
-      noduplicate_contig_num++;
-      totalUnitigs_len += contigs[contig_id].seq.length();
-      first_kmer = contigs[contig_id].seq.substr(0,options.K);
-      last_kmer_RC = contigs[contig_id].seq.substr(contigs[contig_id].seq.length()-options.K).RC();
-      
-      if(first_kmer == last_kmer_RC){
-        palindrome_contig_num++;
-        //startKmer2unitig[first_kmer] = noduplicate_contig_num;
-        hash_map_mt::accessor access;
-        if(startKmer2unitig.find(access, first_kmer)){
-          access->second = noduplicate_contig_num;
-        }else{
-          cerr<<"[Error] kmer not found!"<<endl;
-        }
-        access.release();
-        //dont't know how to do  
-        //cout<<"[Warning] contig "<<contig_id<<" seems like a palindrome seq (+ and - strand): "<<contigs[contig_id].seq<<endl;
-      }else{
-        hash_map_mt::accessor access;
-        if(startKmer2unitig.find(access, first_kmer)){
-          access->second = noduplicate_contig_num;
-        }else{
-          cerr<<"[Error] kmer not found!"<<endl;
-        }
-        access.release();
-        if(startKmer2unitig.find(access, last_kmer_RC)){
-          access->second = -noduplicate_contig_num;
-        }else{
-          cerr<<"[Error] kmer not found!"<<endl;
-        }
-        access.release();
-        //startKmer2unitig[first_kmer] = noduplicate_contig_num;
-        //startKmer2unitig[last_kmer_RC] = -noduplicate_contig_num;
-      }
-    }
-    */
-    WorkQueue2* work_queue4trace_kmer = new WorkQueue2();
-    boost::thread_group prod_threads;
-    for(int t = 0; t<options.thread_num; t++){
-      prod_threads.add_thread(new boost::thread(track_kmer_worker, boost::ref(options), boost::ref(contigs), boost::ref(startKmer2unitig), work_queue4trace_kmer));
-    }
-    prod_threads.join_all();
-    cout<<"[Unitig] "<<work_queue4trace_kmer->assemblyInfo_.seq_num_<<" unitigs reported of length "<<work_queue4trace_kmer->assemblyInfo_.seq_len_in_total_<<" bp in total"<<endl;
-    //cout<<"[Unitig] Among them, "<<duplicateUnitig_num<<" duplicate unitigs found of length "<<duplicateUnitigs_len<<" bp in total."<<endl;
-    //cout<<"[Unitig] After removing duplicates, we have "<<noduplicate_contig_num<<" unitigs of length "<<totalUnitigs_len- duplicateUnitigs_len<<" bp in total."<<endl;
-    //cout<<"[Unitig] Among all non-duplicate unitigs, there are "<<palindrome_contig_num<<" palindromes among "<<hairpin_contig_num+palindrome_contig_num<<" hairpins."<<endl;
-    cout<<"[Unitig] among them, there are "<<work_queue4trace_kmer->assemblyInfo_.palindrome_seq_num_<<" palindromes."<<endl;
-    free(work_queue4trace_kmer);
-  //}
-  //*/
-  //return 0;
+  prod_threads.join_all();
+  size_t non_duplicate_contig_num = work_queue4trace_kmer->assemblyInfo_.seq_num_;
+  cout<<"[Unitig] "<<work_queue4trace_kmer->assemblyInfo_.seq_num_<<" unitigs reported of length "<<work_queue4trace_kmer->assemblyInfo_.seq_len_in_total_<<" bp in total"<<endl;
+  cout<<"[Unitig] among them, there are "<<work_queue4trace_kmer->assemblyInfo_.palindrome_seq_num_<<" palindromes."<<endl;
+  free(work_queue4trace_kmer);
+//*/
 
   //check whether can reconstruct the full sequences from the graph.
-  // if(true){
-  //   string refFile = "/public/hshi/tools/SH-assembly/test/case1/genome10K.fasta";
-  //   ifstream refFin;
-  //   refFin.open(refFile, ios::in);
-  //   string refSeq="";
-  //   getline(refFin, line);
-  //   while(getline(refFin, line)){
-  //     refSeq += line;
-  //   }
-  //   to_upper_DNA(refSeq);
-  //   cout<<"[Test] length of reference sequence: "<<refSeq.length()<<" bp."<<endl;
-  //   int constructed_len=0;
-  //   DNAString kmer=refSeq.substr(0,options.K);
-  //   // while(true){
-  //   //   auto it = startKmer2unitig.find(kmer);
-  //   //   if(it == startKmer2unitig.end()){
-  //   //     cout<<"[Test] kmer not found: "<<kmer<<endl;  
-  //   //     if(constructed_len != 0){
-  //   //       cout<<"[Test] last kmer in the traversed sequence: "<<refSeq.substr(constructed_len-1, options.K)<<endl;
-  //   //       cout<<"[Test] traversal of reference seq broken at "<<constructed_len+options.K-1<<endl;
-  //   //     }
-  //   //     break;
-  //   //   }
-  //   //   //get the real ID
-  //   //   auto id = abs(it->second);
-  //   //   while(id2id_afterRemoveDuplicate[id] < abs(it->second)){
-  //   //     id++;
-  //   //   }
-  //   //   constructed_len += (contigs[id].seq.length() - options.K +1);
-  //   //   cout<<"[Test] find kmer: "<<kmer<<" in contig "<<it->second<<" of length "<<contigs[id].seq.length()<<" bp."<<endl;
-  //   //   cout<<"[Test] contig "<< it->second<<": ";
-  //   //   if(it->second < 0)
-  //   //     cout<<contigs[id].seq.get_RC();
-  //   //   else
-  //   //     cout<<contigs[id].seq;
-  //   //   cout<<" median_abundance: "<<contigs[id].median_abundance<<endl;
-  //   //   kmer = refSeq.substr(constructed_len, options.K);
-  //   //   if(constructed_len+options.K-1 >= refSeq.length()){
-  //   //     cout<<"[Test] reference seq is encoded in the DBG of unitigs"<<endl;
-  //   //     break;
-  //   //   }
-  //   // }
+/*
+  if(false){
+    string refFile = "/public/hshi/tools/SH-assembly/test/case1/genome10K.fasta";
+    ifstream refFin;
+    refFin.open(refFile, ios::in);
+    string refSeq="";
+    getline(refFin, line);
+    while(getline(refFin, line)){
+      refSeq += line;
+    }
+    to_upper_DNA(refSeq);
+    cout<<"[Test] length of reference sequence: "<<refSeq.length()<<" bp."<<endl;
+    int constructed_len=0;
+    DNAString kmer=refSeq.substr(0,options.K);
+    // while(true){
+    //   auto it = startKmer2unitig.find(kmer);
+    //   if(it == startKmer2unitig.end()){
+    //     cout<<"[Test] kmer not found: "<<kmer<<endl;  
+    //     if(constructed_len != 0){
+    //       cout<<"[Test] last kmer in the traversed sequence: "<<refSeq.substr(constructed_len-1, options.K)<<endl;
+    //       cout<<"[Test] traversal of reference seq broken at "<<constructed_len+options.K-1<<endl;
+    //     }
+    //     break;
+    //   }
+    //   //get the real ID
+    //   auto id = abs(it->second);
+    //   while(id2id_afterRemoveDuplicate[id] < abs(it->second)){
+    //     id++;
+    //   }
+    //   constructed_len += (contigs[id].seq.length() - options.K +1);
+    //   cout<<"[Test] find kmer: "<<kmer<<" in contig "<<it->second<<" of length "<<contigs[id].seq.length()<<" bp."<<endl;
+    //   cout<<"[Test] contig "<< it->second<<": ";
+    //   if(it->second < 0)
+    //     cout<<contigs[id].seq.get_RC();
+    //   else
+    //     cout<<contigs[id].seq;
+    //   cout<<" median_abundance: "<<contigs[id].median_abundance<<endl;
+    //   kmer = refSeq.substr(constructed_len, options.K);
+    //   if(constructed_len+options.K-1 >= refSeq.length()){
+    //     cout<<"[Test] reference seq is encoded in the DBG of unitigs"<<endl;
+    //     break;
+    //   }
+    // }
 
-  //   //check whether k-mer are in the CQF with proper coverage
-  //   kmer = refSeq.substr(constructed_len, options.K);
-  //   uint64_t kmer_hash, kmer_RC_hash, kmer_count;
-  //   kmer_hash = NTPC64(kmer, options.K, kmer_hash, kmer_RC_hash);
-  //   kmer_count = cqf_mt.count(kmer_hash%cqf_mt.qf->metadata->range);
-  //   cout<<"[Test] count: "<<kmer_count<<" of kmer: "<<kmer<<endl;
-  // }
+    // //check whether k-mer are in the CQF with proper coverage
+    // kmer = refSeq.substr(constructed_len, options.K);
+    // uint64_t kmer_hash, kmer_RC_hash, kmer_count;
+    // kmer_hash = NTPC64(kmer, options.K, kmer_hash, kmer_RC_hash);
+    // kmer_count = cqf_mt.count(kmer_hash%cqf_mt.qf->metadata->range);
+    // cout<<"[Test] count: "<<kmer_count<<" of kmer: "<<kmer<<endl;
+  }
+*/
+
+/*
+  //load unitigs from file
+  cout<<"[Msg] load unitig graph from file"<<endl;
+  concurrent_vector<Contig> contigs;
+  hash_map_mt startKmer2unitig;
+  concurrent_vector<UnitigNode> unitigNodes;
+  //if(!load_unitig_graph(options, options.output, contigs, startKmer2unitig, unitigNodes)){
+  if(!load_unitig_graph(options.output, contigs)){
+    cerr<<"[Error] failed loading unitig graph."<<endl;
+    return 0;
+  }
+  cout<<"[Msg] "<<contigs.size()-1<<" unitig are loaded."<<endl;
   
-  //output all kmers
-  // for(auto ele : startKmer2unitig){
-  //   cout<<ele.first<<":"<<ele.second<<endl;
-  // }
-  // for(int contig_id = 1; contig_id < 2; contig_id++){
-  //   cout<<"Contig "<<contig_id<<":"<<contigs[contig_id].seq<<endl;
-  //   if(isDuplicate[contig_id]){
+  WorkQueue2* work_queue4trace_kmer = new WorkQueue2(1, 10, 1);
+  boost::thread_group prod_threads;
+  for(int t = 0; t<options.thread_num; t++){
+    prod_threads.add_thread(new boost::thread(track_kmer_worker, boost::ref(options), boost::ref(contigs), boost::ref(startKmer2unitig), work_queue4trace_kmer));
+  }
+  prod_threads.join_all();
+  free(work_queue4trace_kmer);
+
+  unitigNodes.resize(contigs.size());
+  WorkQueue2* work_queue4build_graph = new WorkQueue2(1, 10, 1);
+  //boost::thread_group prod_threads;
+  for(int t = 0; t<options.thread_num; t++){
+    prod_threads.add_thread(new boost::thread(build_graph_worker, boost::ref(options), boost::ref(contigs), boost::ref(startKmer2unitig), boost::ref(unitigNodes), work_queue4build_graph));
+  }
+  prod_threads.join_all();
+  free(work_queue4build_graph);
+*/
+
+/*
+//trace the contigs produced by Minia in the unitig graph
+if(true){
+  //load unitig graph produced by Minia
+  cout<<"[Msg] load unitig graph from file for Minia"<<endl;
+  concurrent_vector<Contig> minia_unitigs;
+  hash_map_mt minia_startKmer2unitig;
+  concurrent_vector<UnitigNode> minia_unitigNodes;
+  string minia_unitig_file = "../Minia-contig-500G/files.list.unitigs.fa";
+  //if(!load_unitig_graph(options, minia_unitig_file, minia_unitigs, minia_startKmer2unitig, minia_unitigNodes)){
+  if(!load_unitig_graph(minia_unitig_file, minia_unitigs)){
+    cerr<<"[Error] failed loading unitig graph."<<endl;
+    return 0;
+  }
+  cout<<"[Msg] "<<minia_unitigs.size()-1<<" unitig are loaded."<<endl;
+  
+  work_queue4trace_kmer = new WorkQueue2(1, 10, 1);
+  for(int t = 0; t<options.thread_num; t++){
+    prod_threads.add_thread(new boost::thread(track_kmer_worker, boost::ref(options), boost::ref(minia_unitigs), boost::ref(minia_startKmer2unitig), work_queue4trace_kmer));
+  }
+  prod_threads.join_all();
+  free(work_queue4trace_kmer);
+
+  minia_unitigNodes.resize(minia_unitigs.size());
+  work_queue4build_graph = new WorkQueue2(1, 10, 1);
+  for(int t = 0; t<options.thread_num; t++){
+    prod_threads.add_thread(new boost::thread(build_graph_worker, boost::ref(options), boost::ref(minia_unitigs), boost::ref(minia_startKmer2unitig), boost::ref(minia_unitigNodes), work_queue4build_graph));
+  }
+  prod_threads.join_all();
+  free(work_queue4build_graph);
+
+  string header, seq;
+  DNAString kmer;
+  vector<int> unitig2SH_contig(contigs.size(), -1);
+  vector<int> SH_contig_lens(1, 0);
+  size_t matched_seg_id = 0;
+  fstream SH_fin;
+  string SH_contig_file = "unitigs.contigs.fa";
+  SH_fin.open(SH_contig_file, ios::in);
+  while(getline(SH_fin, header)){
+    getline(SH_fin, seq);
+    if(seq.length() < 500){
+      continue;
+    }
+    matched_seg_id++;
+    SH_contig_lens.push_back(seq.length());
+    int seq_idx = 0;
+    hash_map_mt::const_accessor const_access;
+    kmer = seq.substr(0, options.K);
+    size_t last_matched_loc;
+    bool isGap = true;
+    while(seq_idx <= seq.length() - options.K){
+      if(startKmer2unitig.find(const_access, kmer)){
+        // if(isGap){
+        //   isGap = false;
+        //   last_matched_loc = seq_idx;
+        //   matched_seg_id++;
+        // }
+        unitig2SH_contig[abs(const_access->second)] = matched_seg_id;
+        seq_idx += contigs[abs(const_access->second)].seq.length() - options.K + 1;
+        if(seq_idx <= seq.length() -options.K){
+          kmer = seq.substr(seq_idx, options.K);
+        }
+        const_access.release();
+      }else{
+        // if(!isGap){
+        //   isGap = true;
+        // }
+        seq_idx++;
+        if(seq_idx <= seq.length() - options.K){
+          kmer.pop();
+          kmer.append(seq[seq_idx+options.K-1]);
+        }
+      }
+    }
+  }
+  SH_fin.close();
+
+  int gap_num = 0;
+  vector<size_t> withoutGap_contig_lens;
+  vector<size_t> withGap_contig_lens;
+
+  string Minia_contig = "../Minia-contig-500G/minia.fa";
+  fstream minia_fin;
+  minia_fin.open(Minia_contig, ios::in);
+  while(getline(minia_fin, header)){
+    getline(minia_fin, seq);
+    if(seq.length() < 500){
+      continue;
+    }
+    withoutGap_contig_lens.push_back(seq.length());
+    int seq_idx = 0;
+    vector<array<int, 2>> path;
+    hash_map_mt::const_accessor const_access;
+    kmer = seq.substr(0, options.K);
+    size_t last_matched_loc;
+    bool isGap = true;
+    while(seq_idx <= seq.length() - options.K){
+      if(startKmer2unitig.find(const_access, kmer)){
+        if(isGap && unitig2SH_contig[abs(const_access->second)] != -1){
+          isGap = false;
+          last_matched_loc = seq_idx;
+          matched_seg_id = unitig2SH_contig[abs(const_access->second)];
+        }
+        if(matched_seg_id != -1 && matched_seg_id != unitig2SH_contig[abs(const_access->second)]){
+          bool isAlternative = false;
+          if(unitig2SH_contig[abs(const_access->second)] == -1){//could be due to alternative paths
+            auto last_matched_node = (*path.begin())[1];
+            if(last_matched_node < 0){
+              for(auto ele : unitigNodes[-last_matched_node].beforeNodes){
+                if(unitig2SH_contig[abs(ele.toNode)] == matched_seg_id){
+                  isAlternative = true;
+                  break;
+                }
+              }
+            }else{
+              for(auto ele : unitigNodes[last_matched_node].afterNodes){
+                if(unitig2SH_contig[abs(ele.toNode)] == matched_seg_id){
+                  isAlternative = true;
+                  break;
+                }
+              }
+            }
+          }
+          if(!isAlternative){
+            cout<<"There is a breakpoint, where "<<(*path.rbegin())[1]<<"("<<contigs[abs((*path.rbegin())[1])].median_abundance<<") should connect to "<<const_access->second<<"("<<contigs[abs(const_access->second)].median_abundance<<")"<<endl;
+            //search in the unitig graph of Minia
+            DNAString kmer_tmp;
+            kmer_tmp = RC_DNA(seq.substr(seq_idx-1, options.K));
+            hash_map_mt::const_accessor const_access_tmp;
+            if(minia_startKmer2unitig.find(const_access_tmp, kmer_tmp)){
+              cout<<"The corresponding node in Minia's unitig graph is "<<-const_access_tmp->second<<endl;
+            }else{
+              cout<<"Why?"<<endl;
+            }
+            //to proceed
+            if(unitig2SH_contig[abs(const_access->second)] == -1){
+              isGap = true;
+              matched_seg_id = -1;
+            }else{
+              last_matched_loc = seq_idx;
+              matched_seg_id = unitig2SH_contig[abs(const_access->second)];
+            }
+          }
+        }
+        path.push_back({seq_idx, const_access->second});
+        seq_idx += contigs[abs(const_access->second)].seq.length() - options.K + 1;
+        if(seq_idx <= seq.length() -options.K){
+          kmer = seq.substr(seq_idx, options.K);
+        }
+        const_access.release();
+      }else{
+        if(!isGap){
+          isGap = true;
+          withGap_contig_lens.push_back(seq_idx - last_matched_loc);
+        }
+        seq_idx++;
+        if(seq_idx <= seq.length() - options.K){
+          kmer.pop();
+          kmer.append(seq[seq_idx+options.K-1]);
+        }
+      }
+    }
+    if(!isGap){
+      withGap_contig_lens.push_back(seq.length() - last_matched_loc);
+    }else{
+      gap_num ++;
+    }
+    //output the path
+    // cout<<"Alignment of seq: "<<header<<endl;
+    // int start, end; start = 0;
+    // for(int x = 0; x < path.size(); x++){
+    //   if(path[x][0] > start){
+    //     cout<<start<<"-"<<path[x][0]<<"(gap) ";
+    //     start = path[x][0];
+    //   }else if(path[x][0] < start){
+    //     cout<<"[error] unexpected."<<endl;
+    //   }
+    //   if(path[x][0] == start){
+    //     end = contigs[abs(path[x][1])].seq.length() - options.K + 1 + start;
+    //     cout<<start<<"-"<<std::min(int(seq.length()), end)<<"(match) ";
+    //     start = end;
+    //   }
+    // }
+    // cout<<endl;
+  }
+  minia_fin.close();
+  gap_num += (withGap_contig_lens.size() - withoutGap_contig_lens.size());
+  cout<<"[Info] "<<gap_num<<" gaps are found inside "<<withoutGap_contig_lens.size()<<" contigs."<<endl
+  <<"[Info] Minia assembly NG50 :"<<NGx(withoutGap_contig_lens, 50, 3209286105)<<endl
+  <<"[Info] After removing the section not in our unitig graph, NG50: "<<NGx(withGap_contig_lens, 50, 3209286105)<<endl;
+}  
+*/
+
+//*
+  //build unitig graph
+  cout<<"[Unitig] build unitig graph."<<endl;
+  DisplayCurrentDateTime();
+  concurrent_vector<UnitigNode> unitigNodes(non_duplicate_contig_num+1);//store the connection info of each node
+  WorkQueue2* work_queue4build_graph = new WorkQueue2(1, 10, 1);
+  for(int t = 0; t<options.thread_num; t++){
+    prod_threads.add_thread(new boost::thread(build_graph_worker, boost::ref(options), boost::ref(contigs), boost::ref(startKmer2unitig), boost::ref(unitigNodes), work_queue4build_graph));
+  }
+  prod_threads.join_all();
+  free(work_queue4build_graph);
+
+  startKmer2unitig.clear();
+
+  //output unitig graph to file
+  cout<<"[Dump] save the unitig graph to file."<<endl;
+  DisplayCurrentDateTime();
+  ofstream fout;
+  fout.open(options.output, ios::out);
+  size_t noduplicate_contig_num=0;
+  for(int contig_id = 1; contig_id<contigs.size(); contig_id++){
+    if(contigs[contig_id].seq.dna_base_num()==0){
+      continue;
+    }
+    fout<<">"<<noduplicate_contig_num<<" LN:i:"<<contigs[contig_id].seq.length()<<" KC:i:"<<contigs[contig_id].median_abundance*(contigs[contig_id].seq.length()-options.K+1)<<" km:f:"<<contigs[contig_id].median_abundance;
+    for(auto tmp : unitigNodes[noduplicate_contig_num+1].afterNodes){
+      if(tmp>0){
+        fout<<" L:+:"<<tmp - 1<<":+";
+      }else{
+        fout<<" L:+:"<<-tmp - 1<<":-";
+      }
+    }
+  
+    for(auto tmp : unitigNodes[noduplicate_contig_num+1].beforeNodes){
+      if(tmp>0){
+        fout<<" L:-:"<<tmp-1<<":+";
+      }else{
+        fout<<" L:-:"<<-tmp-1<<":-";
+      }
+    }
+    fout<<endl<<contigs[contig_id].seq<<endl;
+    noduplicate_contig_num++;
+  }
+  fout.close();
+//*/
+
+//pseudo-align reads and extend
+/*
+if(false){
+  // //remove the duplicates
+  // cout<<"[Post-process] resize contigs by removing duplicates."<<endl;
+  // DisplayCurrentDateTime();
+  // size_t noduplicate_contig_num = 1;
+  // for(int idx = 1; idx < contigs.size(); idx++){
+  //   if(contigs[idx].seq.dna_base_num()==0){
   //     continue;
   //   }
-  //   DNAString first_kmer = contigs[contig_id].seq.substr(0,options.K);
-  //   DNAString last_kmer_RC = contigs[contig_id].seq.substr(contigs[contig_id].seq.length()-options.K).RC();
-  //   if(startKmer2unitig.find(first_kmer) == startKmer2unitig.end()){
-  //     cerr<<"[error] why not found: "<<first_kmer<<endl;
-  //     for(auto ele : startKmer2unitig){
-  //       if(ele.first == first_kmer){
-  //         cerr<<"[error] Hmmm..."<<endl;
-  //       }
-  //     }
-  //   }else{
-  //     cerr<<"[error] "<<startKmer2unitig.find(first_kmer)->first<<endl;
+  //   if(idx > noduplicate_contig_num){
+  //     contigs[noduplicate_contig_num] = contigs[idx];
   //   }
-  //   if(startKmer2unitig.find(last_kmer_RC) == startKmer2unitig.end()){
-  //     cerr<<"[error] why not found!"<<endl;
-  //   }
+  //   noduplicate_contig_num++;
   // }
+  // contigs.resize(noduplicate_contig_num);
 
-  //output graph
-  /*
-  if(false){
-    ofstream fout;
-    string header, seq;
-    DNAString kmer_fix, kmer;
-    char bases[4]={'A','C','G','T'};
-    fout.open(options.output, ios::out);
-    for(int contig_id = 1; contig_id<contigs.size(); contig_id++){
-      if(isDuplicate[contig_id]){
-        continue;
-      }
-      fout<<">"<<(id2id_afterRemoveDuplicate[contig_id]-1)<<" LN:i:"<<contigs[contig_id].seq.length()<<" KC:i:"<<contigs[contig_id].median_abundance*(contigs[contig_id].seq.length()-options.K+1)<<" km:f:"<<contigs[contig_id].median_abundance;
-      kmer_fix=contigs[contig_id].seq.substr(contigs[contig_id].seq.length()-options.K+1, options.K-1);
-
-      for(int x=0; x<4; x++){
-        kmer = kmer_fix; kmer.append(bases[x]);
-        auto it = startKmer2unitig.find(kmer);
-        if(it != startKmer2unitig.end()){
-          auto tmp = it->second;
-          if(tmp>0){
-            fout<<" L:+:"<<tmp-1<<":+";
-            if(isHairpin[tmp]){
-              fout<<" L:+:"<<tmp-1<<":-";
-            }
-          }else{
-            fout<<" L:+:"<<-tmp-1<<":-";
-          }
-        }else{
-          continue;
-        }
-      }
-      kmer_fix=contigs[contig_id].seq.substr(0, options.K-1).RC();
-      for(int x=0; x<4; x++){
-        kmer = kmer_fix; kmer.append(bases[x]);
-        auto it = startKmer2unitig.find(kmer);
-        if(it != startKmer2unitig.end()){
-          auto tmp = it->second;
-          if(tmp>0){
-            fout<<" L:-:"<<tmp-1<<":+";
-            if(isHairpin[tmp]){
-              fout<<" L:-:"<<tmp-1<<":-";
-            }
-          }else{
-            fout<<" L:-:"<<-tmp-1<<":-";
-          }
-        }else{
-          continue;
-        }
-      }
-      fout<<endl;
-      fout<<contigs[contig_id].seq<<endl;
-    }
-    fout.close();
+  //reset the median_abudances of each unitig to 0
+  for(auto& contig : contigs){
+    contig.median_abundance = 0;
   }
-  */
-  //if(false){
-    cout<<"[Unitig] build unitig graph."<<endl;
-    vector<UnitigNode> unitigNodes(work_queue4trace_kmer->assemblyInfo_.seq_num_);//store the connection info of each node
-    //string header, seq;
-    //DNAString kmer_fix, kmer;
-    //char bases[4]={'A','C','G','T'};  
-    WorkQueue2* work_queue4build_graph = new WorkQueue2(0, 10, 0);
-    for(int t = 0; t<options.thread_num; t++){
-      prod_threads.add_thread(new boost::thread(build_graph_worker, boost::ref(options), boost::ref(contigs), boost::ref(startKmer2unitig), boost::ref(unitigNodes), work_queue4build_graph));
-    }
-    prod_threads.join_all();
-    free(work_queue4build_graph);
 
-    ofstream fout;
-    fout.open(options.output, ios::out);
-    size_t noduplicate_contig_num=0;
-    for(int contig_id = 1; contig_id<contigs.size(); contig_id++){
-      if(contigs[contig_id].seq.dna_base_num()==0){
-        continue;
-      }
-      fout<<">"<<noduplicate_contig_num<<" LN:i:"<<contigs[contig_id].seq.length()<<" KC:i:"<<contigs[contig_id].median_abundance*(contigs[contig_id].seq.length()-options.K+1)<<" km:f:"<<contigs[contig_id].median_abundance;
-      for(auto tmp : unitigNodes[noduplicate_contig_num].afterNodes){
-        if(tmp>0){
-          fout<<" L:+:"<<tmp-1<<":+";
-        }else{
-          fout<<" L:+:"<<-tmp-1<<":-";
+  //pseudo-align reads to the compacted de Bruijn graph
+  cout<<"[Align] pseudo align reads to compacted DBG..."<<endl;
+  DisplayCurrentDateTime();
+  seqFile_batch seqFiles_1(seqFileNames, ftype, options.fmode);
+  concurrent_vector<Contig> more_contigs;//(1);
+  hash_map_mt more_startKmer2contigs;
+  for(int t = 0; t<options.thread_num; t++){
+    prod_threads.add_thread(new boost::thread(extend_worker, boost::ref(seqFiles_1), boost::ref(options), boost::ref(contigs), boost::ref(startKmer2unitig), boost::ref(unitigNodes), boost::ref(more_contigs), boost::ref(more_startKmer2contigs)));
+  }
+  prod_threads.join_all();
+
+  //add the new contigs
+  int more_contigs_len_total=0;
+  size_t noduplicate_contig_num = contigs.size();
+  int single_duplicate, both_duplicate; single_duplicate = both_duplicate = 0;
+  int duplicate_nonequal = 0;
+  for(auto& contig : more_contigs){
+    DNAString startKmer, RC_startKmer;
+    startKmer = contig.seq.substr(0, options.K);
+    RC_startKmer = contig.seq.substr(contig.seq.length() - options.K); RC_startKmer.RC();
+    hash_map_mt::accessor access1, access2;
+    hash_map_mt::const_accessor const_access1, const_access2;
+    bool left_dup, right_dup; left_dup = right_dup = false;
+    if(startKmer2unitig.find(const_access1, startKmer)){
+      left_dup = true;
+      if(const_access1->second < 0){
+        if(contig.seq != contigs[-const_access1->second].seq.get_RC()){
+          duplicate_nonequal++;
+        }
+      }else{
+        if(contig.seq != contigs[const_access1->second].seq){
+          duplicate_nonequal++;
         }
       }
-      for(auto tmp : unitigNodes[noduplicate_contig_num].beforeNodes){
-        if(tmp>0){
-          fout<<" L:-:"<<tmp-1<<":+";
-        }else{
-          fout<<" L:-:"<<-tmp-1<<":-";
-        }
-      }
-      fout<<endl<<contigs[contig_id].seq<<endl;
-      noduplicate_contig_num++;
+      const_access1.release();
     }
-    fout.close();
-    
-    /*
-    size_t noduplicate_contig_num=0;
-    for(int contig_id = 1; contig_id<contigs.size(); contig_id++){
-      if(contigs[contig_id].seq.dna_base_num()==0){
-        continue;
-      }
-      fout<<">"<<noduplicate_contig_num<<" LN:i:"<<contigs[contig_id].seq.length()<<" KC:i:"<<contigs[contig_id].median_abundance*(contigs[contig_id].seq.length()-options.K+1)<<" km:f:"<<contigs[contig_id].median_abundance;
-      kmer_fix=contigs[contig_id].seq.substr(contigs[contig_id].seq.length()-options.K+1, options.K-1);
-
-      for(int x=0; x<4; x++){
-        kmer = kmer_fix; kmer.append(bases[x]);
-        hash_map_mt::const_accessor const_access;
-        if(startKmer2unitig.find(const_access, kmer)){
-          auto tmp = const_access->second;
-          if(tmp>0){
-            fout<<" L:+:"<<tmp-1<<":+";
-            //if(isHairpin[tmp]){
-            //  fout<<" L:+:"<<tmp-1<<":-";
-            //}
-          }else{
-            fout<<" L:+:"<<-tmp-1<<":-";
+    if(startKmer2unitig.find(const_access2, RC_startKmer)){
+      right_dup = true;
+      if(!left_dup){
+        if(const_access2->second < 0){
+          if(contig.seq != contigs[-const_access2->second].seq){
+            duplicate_nonequal++;
+          }
+        }else{
+          if(contig.seq != contigs[const_access2->second].seq.get_RC()){
+            duplicate_nonequal++;
           }
         }
-        const_access.release();
       }
-      kmer_fix=contigs[contig_id].seq.substr(0, options.K-1).RC();
-      for(int x=0; x<4; x++){
-        kmer = kmer_fix; kmer.append(bases[x]);
-        hash_map_mt::const_accessor const_access;
-        if(startKmer2unitig.find(const_access, kmer)){
-          auto tmp = const_access->second;
-          if(tmp>0){
-            fout<<" L:-:"<<tmp-1<<":+";
-            //if(isHairpin[tmp]){
-            //  fout<<" L:-:"<<tmp-1<<":-";
-            //}
-          }else{
-            fout<<" L:-:"<<-tmp-1<<":-";
-          }
-        }
-        const_access.release();
-      }
-      fout<<endl;
-      fout<<contigs[contig_id].seq<<endl;
-      noduplicate_contig_num++;
+      const_access2.release();
     }
-    */
-  //}
+    if(left_dup && right_dup){
+      both_duplicate ++;
+    }else if(left_dup || right_dup){
+      single_duplicate ++;
+    }else{
+      startKmer2unitig.insert(access1, startKmer);
+      access1->second = noduplicate_contig_num;
+      access1.release();
+      startKmer2unitig.insert(access2, RC_startKmer);
+      access2->second = -noduplicate_contig_num;
+      access2.release();
+      contigs.push_back(contig);
+      noduplicate_contig_num ++;
+      more_contigs_len_total += contig.seq.length();
+    }
+  }
+  cout<<"[Info] among "<<more_contigs.size()<<" novel contigs, "<<both_duplicate+single_duplicate<<" are duplicates with "
+  <<single_duplicate<<" having duplicate starting k-mer at one end, and "
+  <<both_duplicate<<" having duplicate starting k-mers at both ends. "
+  <<"There are "<<duplicate_nonequal<<" contigs identified as duplicates, but not completely equal to its duplicates."<<endl;
+  cout<<"[Info] "<<more_contigs.size() - both_duplicate - single_duplicate<<" non-duplicate novel contigs of length "<<more_contigs_len_total<<" bp in total are introduced based on pseudo-align."<<endl;
+
+  //build the graph for the novel contigs
+  int last_batch_end_idx = unitigNodes.size();
+  WorkQueue2* work_queue4build_graph = new WorkQueue2(last_batch_end_idx, 10, last_batch_end_idx);
+  unitigNodes.resize(contigs.size());
+  boost::thread_group prod_threads;
+  for(int t = 0; t<options.thread_num; t++){
+    prod_threads.add_thread(new boost::thread(build_graph_worker_continue, boost::ref(options), boost::ref(contigs), boost::ref(startKmer2unitig), boost::ref(unitigNodes), work_queue4build_graph, last_batch_end_idx));
+  }
+  prod_threads.join_all();
+  free(work_queue4build_graph);
+
+  //output new graph
+  vector<int> idx2newidx(contigs.size());
+  int unitigRemoved = 0;
+  int unitigRemovedLen=0;
+  for(int x = 1, y=0; x < contigs.size(); x++){
+    if(contigs[x].median_abundance > 0){
+      idx2newidx[x] = y++;
+    }else{
+      unitigRemoved++;
+      unitigRemovedLen += contigs[x].seq.length();
+    }
+  }
+  cout<<"[Prune] "<<unitigRemoved<<" unitigs of length "<<unitigRemovedLen<<" bp with zero abundance are removed."<<endl;
+  //output unitig graph to file
+  DisplayCurrentDateTime();
+  cout<<"[Dump] save the pruned unitig graph to file."<<endl;
+  ofstream fout;
+  string new_output_file = "unitigs.new.fa";
+  fout.open(new_output_file, std::ios::out);
+  // size_t 
+  noduplicate_contig_num=0;
+  for(int contig_id = 1; contig_id<contigs.size(); contig_id++){
+    if(contigs[contig_id].median_abundance == 0){
+      continue;
+    }
+    fout<<">"<<noduplicate_contig_num<<" LN:i:"<<contigs[contig_id].seq.length()<<" KC:i:"<<contigs[contig_id].median_abundance*(contigs[contig_id].seq.length()-options.K+1)<<" km:f:"<<contigs[contig_id].median_abundance;
+    for(auto tmp : unitigNodes[contig_id].afterNodes){
+      //if(tmp.coverage ==0 || contigs[abs(tmp.toNode)].median_abundance == 0) continue;
+      if(contigs[abs(tmp.toNode)].median_abundance == 0) continue;
+      if(tmp.toNode>0){
+        fout<<" L:+:"<< idx2newidx[tmp.toNode]<<":+";
+      }else{
+        fout<<" L:+:"<< idx2newidx[-tmp.toNode]<<":-";
+      }
+    }
+    for(auto tmp : unitigNodes[contig_id].beforeNodes){
+      //if(tmp.coverage == 0 || contigs[abs(tmp.toNode)].median_abundance == 0) continue;
+      if(contigs[abs(tmp.toNode)].median_abundance == 0) continue;
+      if(tmp.toNode>0){
+        fout<<" L:-:"<<idx2newidx[tmp.toNode]<<":+";
+      }else{
+        fout<<" L:-:"<<idx2newidx[-tmp.toNode]<<":-";
+      }
+    }
+    fout<<endl<<contigs[contig_id].seq<<endl;
+    noduplicate_contig_num++;
+  }
+  fout.close();
+}
+*/
 
   DisplayCurrentDateTime();  
   //contig_summary(contigs);
@@ -812,6 +846,7 @@ struct WorkQueue{
   }
 };
 
+/*
 void track_kmer_worker(const Params& options, const concurrent_vector<Contig>& contigs, hash_map_mt& startKmer2unitig, WorkQueue2* work_queue){
   int start, end, counter, totalUnitigs_len, seq_num, palindrome_contig_num;
   totalUnitigs_len = seq_num = palindrome_contig_num = 0;
@@ -830,26 +865,26 @@ void track_kmer_worker(const Params& options, const concurrent_vector<Contig>& c
           hash_map_mt::accessor access;
           if(startKmer2unitig.find(access, first_kmer)){
             access->second = counter;
+            access.release();
           }else{
             cerr<<"[Error] kmer not found!"<<endl;
           }
-          access.release();
           //dont't know how to do  
           //cout<<"[Warning] contig "<<contig_id<<" seems like a palindrome seq (+ and - strand): "<<contigs[contig_id].seq<<endl;
         }else{
           hash_map_mt::accessor access;
           if(startKmer2unitig.find(access, first_kmer)){
             access->second = counter;
+            access.release();
           }else{
             cerr<<"[Error] kmer not found!"<<endl;
           }
-          access.release();
           if(startKmer2unitig.find(access, last_kmer_RC)){
             access->second = -counter;
+            access.release();
           }else{
             cerr<<"[Error] kmer not found!"<<endl;
           }
-          access.release();
           //startKmer2unitig[first_kmer] = noduplicate_contig_num;
           //startKmer2unitig[last_kmer_RC] = -noduplicate_contig_num;
         }
@@ -861,8 +896,65 @@ void track_kmer_worker(const Params& options, const concurrent_vector<Contig>& c
   work_queue->assemblyInfo_.palindrome_seq_num_ += palindrome_contig_num;
   work_queue->assemblyInfo_.seq_len_in_total_ += totalUnitigs_len;
 }
+*/
 
-void build_graph_worker(const Params& options, const concurrent_vector<Contig>& contigs, const hash_map_mt& startKmer2unitig, vector<UnitigNode>& unitigNodes, WorkQueue2* work_queue){
+void track_kmer_worker(const Params& options, const concurrent_vector<Contig>& contigs, hash_map_mt& startKmer2unitig, WorkQueue2* work_queue){
+  int start, end, counter, totalUnitigs_len, seq_num, palindrome_contig_num;
+  totalUnitigs_len = seq_num = palindrome_contig_num = 0;
+  DNAString first_kmer,last_kmer_RC;
+  while(work_queue->get_work(contigs, start, end, counter)){
+    for(size_t contig_id = start; contig_id < end; contig_id++){
+      if(contigs[contig_id].seq.dna_base_num()!=0){
+        seq_num++;
+        totalUnitigs_len += contigs[contig_id].seq.length();
+        first_kmer = contigs[contig_id].seq.substr(0,options.K);
+        last_kmer_RC = contigs[contig_id].seq.substr(contigs[contig_id].seq.length()-options.K).RC();
+        
+        if(first_kmer == last_kmer_RC){
+          palindrome_contig_num++;
+          hash_map_mt::accessor access;
+          // startKmer2unitig.insert(access, first_kmer);
+          // access->second = counter;
+          // access.release();
+          if(startKmer2unitig.find(access, first_kmer)){
+            access->second = counter;
+            access.release();
+          }else{
+            cerr<<"[Error] kmer not found!"<<endl;
+          }
+          //dont't know how to do  
+          //cout<<"[Warning] contig "<<contig_id<<" seems like a palindrome seq (+ and - strand): "<<contigs[contig_id].seq<<endl;
+        }else{
+          hash_map_mt::accessor access;
+          // startKmer2unitig.insert(access, first_kmer);
+          // access->second = counter;
+          // access.release();
+          // startKmer2unitig.insert(access, last_kmer_RC);
+          // access->second = -counter;
+          // access.release();
+          if(startKmer2unitig.find(access, first_kmer)){
+            access->second = counter;
+            access.release();
+          }else{
+            cerr<<"[Error] kmer not found!"<<endl;
+          }
+          if(startKmer2unitig.find(access, last_kmer_RC)){
+            access->second = -counter;
+            access.release();
+          }else{
+            cerr<<"[Error] kmer not found!"<<endl;
+          }
+        }
+        counter++;
+      }
+    }
+  }
+  work_queue->assemblyInfo_.seq_num_ += seq_num;
+  work_queue->assemblyInfo_.palindrome_seq_num_ += palindrome_contig_num;
+  work_queue->assemblyInfo_.seq_len_in_total_ += totalUnitigs_len;
+}
+
+void build_graph_worker(const Params& options, const concurrent_vector<Contig>& contigs, const hash_map_mt& startKmer2unitig, concurrent_vector<UnitigNode>& unitigNodes, WorkQueue2* work_queue){
   DNAString kmer_fix, kmer;
   char bases[4]={'A','C','G','T'};
   int start, end, counter;//, first_count;
@@ -890,11 +982,17 @@ void build_graph_worker(const Params& options, const concurrent_vector<Contig>& 
           // }else{
           //   buf<<" L:+:"<<-tmp-1<<":-";
           // }
+          const_access.release();
         }
-        const_access.release();
       }
+      // if(unitigNodes[counter].afterNodes.size()){
+      //   sort(unitigNodes[counter].afterNodes.begin(), unitigNodes[counter].afterNodes.end(), [](const Edge& lhs, const Edge& rhs){
+      // return abs(lhs.toNode) < abs(rhs.toNode);
+      //   });
+      // }
+
       kmer_fix=contigs[contig_id].seq.substr(0, options.K-1).RC();
-      for(int x=0; x<4; x++){
+      for(int x=3; x >= 0; x--){
         kmer = kmer_fix; kmer.append(bases[x]);
         hash_map_mt::const_accessor const_access;
         if(startKmer2unitig.find(const_access, kmer)){
@@ -908,8 +1006,91 @@ void build_graph_worker(const Params& options, const concurrent_vector<Contig>& 
           // }else{
           //   buf<<" L:-:"<<-tmp-1<<":-";
           // }
+          const_access.release();
         }
-        const_access.release();
+      }
+      // if(unitigNodes[counter].beforeNodes.size()){
+      //   //fix the bug in Minia
+      //   sort(unitigNodes[counter].beforeNodes.begin(), unitigNodes[counter].beforeNodes.end(), [](const Edge& lhs, const Edge& rhs){
+      //     return abs(lhs.toNode) < abs(rhs.toNode);
+      //   });
+      // }
+      //buf<<endl<<contigs[contig_id].seq<<endl;
+      counter++;
+    }
+    // while(work_queue->count2output.front() != first_count){
+    //   boost::this_thread::sleep_for(boost::chrono::milliseconds(20));
+    // }
+    // work_queue->write_mut_.lock();
+    // fout<<buf.str();
+    // work_queue->count2output.pop();
+    // work_queue->write_mut_.unlock();
+  }
+}
+
+/*
+void build_graph_worker_continue(const Params& options, const concurrent_vector<Contig>& contigs, const hash_map_mt& startKmer2unitig, concurrent_vector<UnitigNode>& unitigNodes, WorkQueue2* work_queue, const int& last_batch_end_idx){
+  DNAString kmer_fix, kmer;
+  char bases[4]={'A','C','G','T'};
+  int start, end, counter;//, first_count;
+  while(work_queue->get_work(contigs, start, end, counter)){
+    //first_count = counter; //mark the start of the counter.
+    //stringstream buf;
+    for(int contig_id = start; contig_id<end; contig_id++){
+      if(contigs[contig_id].seq.dna_base_num()==0){
+        continue;
+      }
+      //buf<<">"<<counter-1<<" LN:i:"<<contigs[contig_id].seq.length()<<" KC:i:"<<contigs[contig_id].median_abundance*(contigs[contig_id].seq.length()-options.K+1)<<" km:f:"<<contigs[contig_id].median_abundance;
+      kmer_fix=contigs[contig_id].seq.substr(contigs[contig_id].seq.length()-options.K+1, options.K-1);
+
+      for(int x=0; x<4; x++){
+        kmer = kmer_fix; kmer.append(bases[x]);
+        hash_map_mt::const_accessor const_access;
+        if(startKmer2unitig.find(const_access, kmer)){
+          auto tmp = const_access->second;
+          unitigNodes[counter].afterNodes.push_back(Edge(tmp));
+          if(abs(tmp) < last_batch_end_idx){
+            if(tmp > 0){
+              unitigNodes[tmp].beforeNodes.push_back(Edge(-counter));
+            }else{
+              unitigNodes[-tmp].afterNodes.push_back(Edge(-counter));
+            }
+          }
+          // if(tmp>0){
+          //   buf<<" L:+:"<<tmp-1<<":+";
+          //   //if(isHairpin[tmp]){
+          //   //  fout<<" L:+:"<<tmp-1<<":-";
+          //   //}
+          // }else{
+          //   buf<<" L:+:"<<-tmp-1<<":-";
+          // }
+          const_access.release();
+        }
+      }
+      kmer_fix=contigs[contig_id].seq.substr(0, options.K-1).RC();
+      for(int x=0; x<4; x++){
+        kmer = kmer_fix; kmer.append(bases[x]);
+        hash_map_mt::const_accessor const_access;
+        if(startKmer2unitig.find(const_access, kmer)){
+          auto tmp = const_access->second;
+          unitigNodes[counter].beforeNodes.push_back(Edge(tmp));
+          if(abs(tmp) < last_batch_end_idx){
+            if(tmp > 0){
+              unitigNodes[tmp].beforeNodes.push_back(Edge(counter));
+            }else{
+              unitigNodes[-tmp].afterNodes.push_back(Edge(counter));
+            }
+          }
+          // if(tmp>0){
+          //   buf<<" L:-:"<<tmp-1<<":+";
+          //   //if(isHairpin[tmp]){
+          //   //  fout<<" L:-:"<<tmp-1<<":-";
+          //   //}
+          // }else{
+          //   buf<<" L:-:"<<-tmp-1<<":-";
+          // }
+          const_access.release();
+        }
       }
       //buf<<endl<<contigs[contig_id].seq<<endl;
       counter++;
@@ -923,6 +1104,380 @@ void build_graph_worker(const Params& options, const concurrent_vector<Contig>& 
     // work_queue->write_mut_.unlock();
   }
 }
+*/
+
+/*
+void processDataChunk_extend(const Params& options, concurrent_vector<Contig>& contigs, hash_map_mt& startKmer2unitig, concurrent_vector<UnitigNode>& unitigNodes, concurrent_vector<Contig>& more_contigs, hash_map_mt& more_startKmer2contigs, chunk& dataChunk);
+void extend_worker(seqFile_batch& seqFiles, const Params& options, concurrent_vector<Contig>& contigs, hash_map_mt& startKmer2unitig, concurrent_vector<UnitigNode>& unitigNodes, concurrent_vector<Contig>& more_contigs, hash_map_mt& more_startKmer2contigs){
+  chunk dataChunk;
+  while(seqFiles.getDataChunk(dataChunk)){
+    processDataChunk_extend(options, contigs, startKmer2unitig, unitigNodes, more_contigs, more_startKmer2contigs, dataChunk);
+  }
+}
+bool insert_or_replace(hash_map_mt& startKmer2unitig, const DNAString& dnastr, const size_t idx);
+bool is_connected(const Params& options, const concurrent_vector<Contig>& contigs, const concurrent_vector<UnitigNode>& unitigNodes, const int startNode, const int endNode, const int dis_in_read);
+*/
+// void processDataChunk_extend(const Params& options, concurrent_vector<Contig>& contigs, hash_map_mt& startKmer2unitig, concurrent_vector<UnitigNode>& unitigNodes, concurrent_vector<Contig>& more_contigs, hash_map_mt& more_startKmer2contigs, chunk& dataChunk){
+//   std::string line, seq;
+//   while(dataChunk.readLine(line)){
+//     if(line.empty()){
+//       continue;
+//     }else if(line[0] != '@'){
+//       continue;
+//     }
+//     if(!dataChunk.readLine(seq)){
+//       break;
+//     }
+//     //seq = "AAAATTTATAGCTAACGCCAAATTTCTTTGGGTCAGTTTCAATGTTTACCTCAAACTTGGGTAATTAAACCGACTTGAACGGCGCGTCTCTGCGCCTAAC";
+//     if(seq.length()<options.K){
+//       dataChunk.skipLines(2);//skip two lines after the sequence line
+//       continue;
+//     }
+//     DNAString kmer;
+//     vector<array<int, 2>> path;
+    
+//     int seq_idx = 0;
+//     for(int x = seq_idx; x < (seq_idx + options.K) && x < seq.length(); x++){
+//       if(seq[x] == 'n' || seq[x]=='N'){
+//         seq_idx = x+1;
+//         //break;
+//       }
+//     }
+//     if(seq_idx <= seq.length()-options.K){
+//       kmer = seq.substr(seq_idx, options.K);
+//     }//multithread_io::mtx.lock();
+//     while(seq_idx <= seq.length()-options.K){ //cout<<seq_idx<<":";
+//       hash_map_mt::const_accessor const_access;
+//       if(startKmer2unitig.find(const_access, kmer)){
+//         auto tmp = const_access->second;
+//         const_access.release();
+//         //see whether the RC(k-mer before) is also recorded
+//         if(seq_idx > 0 && seq[seq_idx-1] != 'n' && seq[seq_idx-1] != 'N'){
+//           DNAString kmer_tmp = seq.substr(seq_idx-1, options.K);
+//           kmer_tmp.RC();
+//           if(startKmer2unitig.find(const_access, kmer_tmp)){
+//             auto contig_idx  = const_access->second;
+//             path.push_back(array<int, 2>{-seq_idx, contig_idx});//-seq_idx indicate RC of k-mer ends before seq_idx 
+//             const_access.release();
+//           }
+//         }
+//         path.push_back(array<int, 2>{seq_idx, tmp});
+//         //jump to next k-mer
+//         seq_idx += (contigs[abs(tmp)].seq.dna_base_num() - options.K + 1);
+//       }else if(seq_idx+options.K < seq.length()){
+//         if(seq[seq_idx + options.K] != 'n' && seq[seq_idx + options.K] != 'N'){
+//           kmer.pop().append(seq[seq_idx + options.K]);
+//           seq_idx++;
+//           continue;
+//         }else{
+//           seq_idx = seq_idx + options.K + 1;
+//         }
+//       }else{
+//         break;
+//       }
+//       if(seq_idx + options.K - 1 >= seq.length()){
+//         break;      
+//       }
+//       for(int x = seq_idx; x < (seq_idx + options.K) && x < seq.length(); x++){
+//         if(seq[x] == 'n' || seq[x]=='N'){
+//           x++;
+//           while(x < seq.length() && (seq[x] == 'n' || seq[x]=='N')){
+//             x++;
+//           }
+//           seq_idx = x;
+//         }
+//       }
+//       if(seq_idx <= seq.length()-options.K){
+//         kmer = seq.substr(seq_idx, options.K);
+//       }
+//     }//cout<<"seq_idx"<<endl;
+    
+//     //Process the alignment
+//     //add node coverage and connections
+//     /*
+//     for(int x = 0; x < path.size(); x++){
+//       if(path[x][0]<0){
+//         int A, B;
+//         A = abs(path[x][1]);
+//         B = abs(path[x+1][1]);
+//         if(path[x][1] < 0){
+//           for(auto& node : unitigNodes[A].afterNodes){
+//             if(abs(node.toNode) == B){
+//               node.coverage++;
+//             }
+//           }
+//         }else{
+//           for(auto& node : unitigNodes[A].beforeNodes){
+//             if(abs(node.toNode) == B){
+//               node.coverage++;
+//             }
+//           }
+//         }
+//         if(path[x+1][1] < 0){
+//           for(auto& node : unitigNodes[B].afterNodes){
+//             if(abs(node.toNode) == A){
+//               node.coverage++;
+//             }
+//           }
+//         }else{
+//           for(auto& node : unitigNodes[B].beforeNodes){
+//             if(abs(node.toNode) == A){
+//               node.coverage++;
+//             }
+//           }
+//         }
+//         if(x==0 || path[x-1][1] != -path[x][1]){
+//           ++(contigs[abs(path[x][1])].median_abundance);
+//         }
+//       }else{
+//         ++(contigs[abs(path[x][1])].median_abundance);
+//       }
+//     }
+//     */
+//     for(int x = 0; x < path.size(); x++){
+//       if(path[x][0] >= 0){
+//         ++(contigs[abs(path[x][1])].median_abundance);
+//       }else if(path[x-1][1] != -path[x][1]){
+//         ++(contigs[abs(path[x][1])].median_abundance);
+//       }
+//     }
+
+//     //trying to connect unitigs
+//     // int new_contig_num = 0;
+//     //*
+//     if(path.size()){
+//       int last_contig_idx = 0;
+//       int seq_toMatch = 0;//next sequence to match
+//       int path_idx = 0;
+//       if(path[0][0] >= 0){
+//         path_idx = 1;
+//       }
+//       while(path_idx < path.size()){
+//         if(path[path_idx][0] < 0){
+//           path_idx += 2;
+//         }else{
+//           last_contig_idx = path[path_idx-1][1];
+//           seq_toMatch = path[path_idx-1][0] + contigs[abs(last_contig_idx)].seq.length() - options.K + 1;
+
+//           if(seq_toMatch >= path[path_idx][0]){
+//             path_idx ++;
+//             continue;
+//           }
+
+//           // DNAString startKmer;
+//           // startKmer = seq.substr(seq_toMatch, options.K);
+//           // hash_map_mt::const_accessor const_access;
+//           // if(more_startKmer2contigs.find(const_access, startKmer)){
+//           //   path_idx ++;
+//           //   const_access.release();
+//           //   continue;
+//           // }
+
+//           if(!is_connected(options, contigs, unitigNodes, last_contig_idx, path[path_idx][1], path[path_idx][0] - seq_toMatch)){
+//             DNAString startKmer;
+//             startKmer = seq.substr(seq_toMatch, options.K);
+//             hash_map_mt::const_accessor const_access;
+//             if(more_startKmer2contigs.find(const_access, startKmer)){
+//               path_idx ++;
+//               const_access.release();
+//               continue;
+//             }
+//             //see whether already exist
+//             // bool isDuplicate=false;
+//             // DNAString startKmer, RC_startKmer;
+//             DNAString RC_startKmer;
+//             // startKmer = seq.substr(seq_toMatch, options.K);    
+//             // hash_map_mt::const_accessor const_access;
+//             // if(more_startKmer2contigs.find(const_access, startKmer)){
+//             //   seq_idx ++;
+//             //   const_access.release();
+//             //   continue;
+//             // }
+//             RC_startKmer = seq.substr(path[path_idx][0]-1, options.K); 
+//             RC_startKmer.RC();
+//             // if(more_startKmer2contigs.find(const_access, RC_startKmer)){
+//             //   seq_idx ++;
+//             //   const_access.release();
+//             //   continue;
+//             // }
+
+//             //int contig_id_new = contigs.size();
+//             auto it = more_contigs.push_back(Contig(seq.substr(seq_toMatch, path[path_idx][0] - seq_toMatch + options.K - 1), 1));
+//             hash_map_mt::accessor access;
+//             if(more_startKmer2contigs.insert(access, startKmer)){
+//               access.release();
+//             }
+//             if(more_startKmer2contigs.insert(access, RC_startKmer)){
+//               access.release();
+//             }
+//             //int contig_id_new = it - more_contigs.begin();
+//             //unitigNodes.push_back(UnitigNode());
+//             //trace kmer
+//             // DNAString kmer;
+//             // kmer = it->seq.substr(0, options.K);
+//             // hash_map_mt::accessor access;
+//             // if(startKmer2unitig.insert(access, kmer)){
+//             //   access->second = contig_id_new;
+//             //   access.release();
+//             // }else{
+//             //   cerr<<"[Error] failed to insert k-mer "<<kmer<<" for contig "<<contig_id_new<<endl;
+//             // }
+//             // kmer = it->seq.substr(it->seq.length() - options.K).get_RC();
+//             // if(startKmer2unitig.insert(access, kmer)){
+//             //   access->second = -contig_id_new;
+//             //   access.release();
+//             // }else{
+//             //   cerr<<"[Error] failed to insert k-mer "<<kmer<<" for contig "<<-contig_id_new<<endl;
+//             // }
+//             // //add connections
+//             // if(last_contig_idx < 0){
+//             //   unitigNodes[-last_contig_idx].beforeNodes.push_back(Edge(contig_id_new, 1));
+//             //   unitigNodes[contig_id_new].beforeNodes.push_back(Edge(-last_contig_idx, 1));
+//             // }else{
+//             //   unitigNodes[last_contig_idx].afterNodes.push_back(Edge(contig_id_new, 1));
+//             //   unitigNodes[contig_id_new].beforeNodes.push_back(Edge(-last_contig_idx, 1));
+//             // }
+//           }
+//           path_idx ++;
+//         }
+//       }
+
+//       // if(path[0][0] >= 0){
+//       //   last_contig_idx = path[0][1];
+//       //   seq_toMatch = path[0][0] + contigs[abs(last_contig_idx)].seq.length() - options.K + 1;
+//       //   path_idx = 1;
+//       // }else{
+//       //   last_contig_idx = path[1][1];
+//       //   seq_toMatch = path[1][0] + contigs[abs(last_contig_idx)].seq.length() - options.K + 1;
+//       //   path_idx = 2;
+//       // }
+//       // //int last_matched_loc = -1;
+//       // while(path_idx < path.size()){
+//       //   if(path[path_idx][0] < 0){
+//       //     if(path[path_idx-1][1] == -path[path_idx][1]){
+//       //       path_idx++;
+//       //       continue;
+//       //     }else{//not found
+//       //       int tmp = -path[path_idx][0] - (contigs[abs(path[path_idx][1])].seq.length() - options.K + 1);
+//       //       if(tmp == seq_toMatch){
+//       //         last_contig_idx  = path[path_idx][1];
+//       //         seq_toMatch  = -path[path_idx][0];
+//       //         path_idx++;
+//       //       }else if(tmp > seq_toMatch){//GAP
+//       //         //tmp is not the start of path[path_idx][1], which could be caused by sequencing error at the start k-mer.
+//       //         last_contig_idx = path[path_idx][1];
+//       //         seq_toMatch = -path[path_idx][0];// + contigs[abs(last_contig_idx)].seq.length() - options.K + 1;
+//       //         path_idx++;
+//       //         // cout<<"[Warning] unexpected case "<<endl;
+//       //       }else{//TODO: what if tmp < seq_toMatch, which is unexpected
+//       //         last_contig_idx = path[path_idx][1];
+//       //         seq_toMatch = -path[path_idx][0];// + contigs[abs(last_contig_idx)].seq.length() - options.K + 1;
+//       //         path_idx++;
+//       //         // cout<<"[Warning] unexpected case "<<endl;
+//       //       }
+//       //     }
+//       //   }else{
+//       //     if(seq_toMatch == path[path_idx][0]){
+//       //       last_contig_idx = path[path_idx][1];
+//       //       seq_toMatch += contigs[abs(last_contig_idx)].seq.length() - options.K + 1;
+//       //       path_idx++;
+//       //     }else if(seq_toMatch < path[path_idx][0]){//GAP
+//       //       if(!is_connected(options, contigs, unitigNodes, last_contig_idx, path[path_idx][1], path[path_idx][0] - seq_toMatch)){//introduce a new unitig
+//       //         //new_contig_num++;
+              
+//       //         mt_log(std::to_string(new_contig_num)+" new contig added.\n");
+//       //         mt_log("between node "+std::to_string(last_contig_idx)+" in "+ std::to_string(path_idx-1)+" and next node.\n");
+//       //         multithread_io::mtx.lock();
+//       //         cout<<"#sequence "<<seq.length()<<" bp = ";
+//       //         for(auto ele : path){
+//       //           cout<<"\t"<<ele[0]<<":"<<ele[1]<<"("<<contigs[abs(ele[1])].seq.length()<<" bp)\n";
+//       //           // <<"\nKmer:  ";
+//       //           // if(ele[0]<0){
+//       //           //   cout<<RC_DNA(seq.substr(-ele[0], options.K))<<endl;
+//       //           // }else{
+//       //           //   cout<<seq.substr(ele[0], options.K)<<endl;
+//       //           // }
+//       //           // if(ele[1] < 0){
+//       //           //   cout<<"Contig:"<<contigs[-ele[1]].seq.get_RC();
+//       //           // }else{
+//       //           //   cout<<"Contig:"<<contigs[ele[1]].seq;
+//       //           // }
+//       //           // cout<<endl;
+//       //         }
+//       //         cout<<endl<<endl<<std::flush;
+//       //         multithread_io::mtx.unlock();
+              
+
+//       //         int contig_id_new = contigs.size();
+//       //         auto it = contigs.push_back(Contig(seq.substr(seq_toMatch, path[path_idx][0] - seq_toMatch + options.K - 1), 1));
+//       //         unitigNodes.push_back(UnitigNode());
+//       //         //trace kmer
+//       //         DNAString kmer;
+//       //         kmer = it->seq.substr(0, options.K);
+//       //         hash_map_mt::accessor access;
+//       //         if(startKmer2unitig.insert(access, kmer)){
+//       //           access->second = contig_id_new;
+//       //           access.release();
+//       //         }else{
+//       //           cerr<<"[Error] failed to insert k-mer "<<kmer<<" for contig "<<contig_id_new<<endl;
+//       //         }
+//       //         kmer = it->seq.substr(it->seq.length() - options.K).get_RC();
+//       //         if(startKmer2unitig.insert(access, kmer)){
+//       //           access->second = -contig_id_new;
+//       //           access.release();
+//       //         }else{
+//       //           cerr<<"[Error] failed to insert k-mer "<<kmer<<" for contig "<<-contig_id_new<<endl;
+//       //         }
+//       //         //add connections
+//       //         if(last_contig_idx < 0){
+//       //           unitigNodes[-last_contig_idx].beforeNodes.push_back(Edge(contig_id_new, 1));
+//       //           unitigNodes[contig_id_new].beforeNodes.push_back(Edge(-last_contig_idx, 1));
+//       //         }else{
+//       //           unitigNodes[last_contig_idx].afterNodes.push_back(Edge(contig_id_new, 1));
+//       //           unitigNodes[contig_id_new].beforeNodes.push_back(Edge(-last_contig_idx, 1));
+//       //         }
+//       //       }
+//       //       last_contig_idx = path[path_idx][1];
+//       //       seq_toMatch = path[path_idx][0] + contigs[abs(last_contig_idx)].seq.length() - options.K + 1;
+//       //       path_idx++;
+//       //     }else{//TODO: what if seq_toMatch > path[path_idx][0], which is unexpected.
+//       //       last_contig_idx = path[path_idx][1];
+//       //       seq_toMatch = path[path_idx][0] + contigs[abs(last_contig_idx)].seq.length() - options.K + 1;
+//       //       path_idx++;
+//       //       // cout<<"[Warning] unexpected case "<<endl;
+//       //     }
+//       //   }
+//       // }
+
+//     }
+//     //*/
+
+//     //multithread_io::mtx.lock();
+//     // cout<<"#sequence "<<seq.length()<<" bp = ";
+//     // for(auto ele : path){
+//     //   cout<<ele[0]<<":"<<ele[1]<<"("<<contigs[abs(ele[1])].seq.length()<<" bp)\t";
+//     //   // <<"\nKmer:  ";
+//     //   // if(ele[0]<0){
+//     //   //   cout<<RC_DNA(seq.substr(-ele[0], options.K))<<endl;
+//     //   // }else{
+//     //   //   cout<<seq.substr(ele[0], options.K)<<endl;
+//     //   // }
+//     //   // if(ele[1] < 0){
+//     //   //   cout<<"Contig:"<<contigs[-ele[1]].seq.get_RC();
+//     //   // }else{
+//     //   //   cout<<"Contig:"<<contigs[ele[1]].seq;
+//     //   // }
+//     //   // cout<<endl;
+//     // }
+//     // cout<<endl<<endl<<std::flush;
+//     // multithread_io::mtx.unlock();
+//     //skip two lines
+//     dataChunk.skipLines(2);
+//   }
+//   //free data chunk
+//   free(dataChunk.get_reads());
+// }
+
 
 /*
 void find_unitigs_mt_master(CQF_mt& cqf, const vector<string>& seqFiles, const Params& params, vector_mt<string>& contigs){
@@ -1148,6 +1703,81 @@ void processDataChunk(CQF_mt& cqf, const Params& options, concurrent_vector<Cont
   }
   //free data chunk
   free(dataChunk.get_reads());
+}
+*/
+
+bool is_connected(const Params& options, const concurrent_vector<Contig>& contigs, const concurrent_vector<UnitigNode>& unitigNodes, const int startNode, const int endNode, const int dis_in_read){
+  if(startNode < 0){
+    if(unitigNodes[-startNode].beforeNodes.size()){
+      return false;
+    }
+  }else{
+    if(unitigNodes[startNode].afterNodes.size()){
+      return false;
+    }
+  }
+  if(endNode < 0){
+    if(unitigNodes[-endNode].afterNodes.size()){
+      return false;
+    }
+  }else{
+    if(unitigNodes[endNode].beforeNodes.size()){
+      return false;
+    }
+  }
+  return true;
+}
+
+/*
+bool is_connected(const Params& options, const concurrent_vector<Contig>& contigs, const concurrent_vector<UnitigNode>& unitigNodes, const int startNode, const int endNode, const int dis_in_read){
+  int max_dis = dis_in_read + options.dis_deviation_max;
+  //breadth-first search
+  //map<int, int> toNodeDis_old, toNodeDis;
+  vector<array<int, 2>> toNodeDis_old, toNodeDis;
+  toNodeDis_old.push_back({startNode, 0});//distance to start node is 0
+  while(toNodeDis_old.size()){
+    for(auto ele : toNodeDis_old){
+      if(ele[0] < 0){
+        for(auto edge : unitigNodes[-ele[0]].beforeNodes){
+          // if(abs(edge.toNode) == abs(endNode)){
+          if(edge.toNode == endNode){
+            return true;
+          }
+          int dis_tmp = ele[1] + (contigs[abs(edge.toNode)].seq.length() - options.K + 1);
+          if(dis_tmp <= max_dis){
+            toNodeDis.push_back({edge.toNode, dis_tmp});
+            // auto it = toNodeDis.find(edge.toNode);
+            // if(it == toNodeDis.end()){
+            //   toNodeDis.insert(pair<int, int>(edge.toNode, dis_tmp));
+            // }else{
+            //   it->second = min(it->second, dis_tmp);
+            // }
+          }
+        }
+      }else{
+        for(auto edge : unitigNodes[ele[0]].afterNodes){
+          // if(abs(edge.toNode) == abs(endNode)){
+          if(edge.toNode == endNode){
+            return true;
+          }
+          int dis_tmp = ele[1] + (contigs[abs(edge.toNode)].seq.length() - options.K + 1);
+          if(dis_tmp <= max_dis){
+            toNodeDis.push_back({edge.toNode, dis_tmp});
+            // auto it = toNodeDis.find(edge.toNode);
+            // if(it == toNodeDis.end()){
+            //   toNodeDis.insert(pair<int, int>(edge.toNode, dis_tmp));  
+            // }else{
+            //   it->second = min(it->second, dis_tmp);
+            // }
+          }
+        }
+      }
+    }
+    toNodeDis_old = std::move(toNodeDis);
+    // toNodeDis_old = toNodeDis;
+    // toNodeDis.clear();
+  }
+  return false;
 }
 */
 
@@ -1386,6 +2016,7 @@ void find_unitigs_mt_master(CQF_mt& cqf, seqFile_batch& seqFiles, const Params& 
         auto iter = contigs.push_back(Contig(kmer, kmer_count));
         contig_id = iter - contigs.begin(); //std::distance(contigs.begin(), iter);
         //startKmer2unitig.insert_mt(kmer, contig_id); //may not be the start k-mer
+        /*whether it is a simple sequence
         bool is_dup = false;
         for(int x = 0; x<4; x++){
           if(kmer == string(options.K, DNA::bases[x])){
@@ -1403,6 +2034,7 @@ void find_unitigs_mt_master(CQF_mt& cqf, seqFile_batch& seqFiles, const Params& 
         if(is_dup){
           continue;
         }
+        */
 
         //startKmer2unitig.insert_mt(kmer_RC, -contig_id); //may not be the end k-mer
         // Contig master_contig(kmer, kmer_count);
@@ -1414,9 +2046,20 @@ void find_unitigs_mt_master(CQF_mt& cqf, seqFile_batch& seqFiles, const Params& 
         //break;
         get_unitig_forward(cqf, options, contigs, startKmer2unitig, work_queue, iter);
         //contigs.set(contig_id, Contig(RC_DNA(contigs[contig_id].seq), contigs[contig_id].median_abundance));
+        hash_map_mt::const_accessor const_access;
         if(iter->seq.dna_base_num() > 0){
-          iter->seq.RC();
-          get_unitig_forward(cqf, options, contigs, startKmer2unitig, work_queue, iter);
+          if(startKmer2unitig.find(const_access, DNAString(kmer))){
+            if(const_access->second > contig_id){
+              iter->seq.RC();
+              get_unitig_forward(cqf, options, contigs, startKmer2unitig, work_queue, iter);    
+            }else if(const_access->second < contig_id){
+              iter->clear();
+            }
+            const_access.release();
+          }else{
+            iter->seq.RC();
+            get_unitig_forward(cqf, options, contigs, startKmer2unitig, work_queue, iter);
+          }
         }
         //get_unitig_backward(cqf, options, contigs, startKmer2unitig, work_queue, contig_id);
 
@@ -2137,6 +2780,8 @@ void get_unitig_forward(CQF_mt& cqf, const Params& options, vector_mt<Contig>& c
   }
 }
 */
+
+/*
 void get_unitig_forward(CQF_mt& cqf, const Params& options, concurrent_vector<Contig>& contigs, unordered_set_mt& startKmers, WorkQueue* work_queue, concurrent_vector<Contig>::iterator& contigIter){
   array<bool, 4> candidates_before({false, false, false, false}), candidates_after({false, false, false, false});
   //array<string, 4> kmer_befores, kmer_afters, kmer_befores_RC, kmer_afters_RC;
@@ -2294,15 +2939,16 @@ void get_unitig_forward(CQF_mt& cqf, const Params& options, concurrent_vector<Co
     }
   }
 }
+*/
 
 //True if it was inserted. 
 //if dnaStr exists, insert only when idx is smaller than existing one; otherwise simply insert the new record. 
 bool insert_or_replace(hash_map_mt& startKmer2unitig, const DNAString& dnastr, const size_t idx){
   hash_map_mt::accessor access;
-  if(startKmer2unitig.insert(access, dnastr) || access->second >= idx){//True if new pair was inserted; false if key was already in the map.
-    access->second = idx;
+  if(startKmer2unitig.insert(access, dnastr) || access->second >= idx){// insert: True if new pair was inserted; false if key was already in the map.
+    access->second = idx; access.release();
     return true;
-  }
+  } access.release();
   return false;
 }
 
@@ -2317,11 +2963,12 @@ void get_unitig_forward(CQF_mt& cqf, const Params& options, concurrent_vector<Co
   int candidates_before_num, candidates_after_num;
   int nodes_before_num, nodes_after_num;
   uint64_t kmer_hash, kmer_RC_hash, current_kmer_hash, current_kmer_RC_hash;
-  DNAString kmer, kmer_RC, current_kmer, current_kmer_RC, current_kmer_fix;
+  DNAString kmer, kmer_RC, current_kmer, current_kmer_RC, current_kmer_fix, first_kmer;
   uint64_t kmer_count, kmer_RC_count;
   int idx;
   
   DNAString& contig_seq = contigIter->seq;
+  first_kmer = contig_seq.substr(0, options.K);
   //string contig_seq = contigIter->seq.to_str();
   current_kmer = contig_seq.substr(contig_seq.length()-K);
   current_kmer_RC = current_kmer.get_RC();
@@ -2357,13 +3004,13 @@ void get_unitig_forward(CQF_mt& cqf, const Params& options, concurrent_vector<Co
           nodes_after_num++;
           kmer_abundance_afters[x] = kmer_count;
           node_after_x = x;
+          const_access.release();
         //}else if(kmer_count >= abundance_min){
         }else{
           kmer_abundance_afters[x] = kmer_count;
           candidates_after[x] = true; //possible because of hash collisions
           candidates_after_num ++;
         }
-        const_access.release();
       }
     }
     
@@ -2391,12 +3038,12 @@ void get_unitig_forward(CQF_mt& cqf, const Params& options, concurrent_vector<Co
         if(isTraveled && startKmer2unitig.find(const_access, kmer)){
           nodes_before_num++; node_before_x = x;
         //}else if(kmer_count >= abundance_min){
+          const_access.release();
         }else{
           kmer_abundance_befores[x] = kmer_count;
           candidates_before[x] = true;
           candidates_before_num++;
         }
-        const_access.release();
       }
     }
 
@@ -2427,8 +3074,8 @@ void get_unitig_forward(CQF_mt& cqf, const Params& options, concurrent_vector<Co
             auto it = contigs.push_back(Contig(kmer, kmer_abundance_afters[x]));
             access->second = it - contigs.begin();
             work_queue->add_work(it);
+            access.release();
           }
-          access.release();
         }
       }
       kmer = current_kmer_RC;
@@ -2440,31 +3087,49 @@ void get_unitig_forward(CQF_mt& cqf, const Params& options, concurrent_vector<Co
             auto it = contigs.push_back(Contig(kmer, kmer_abundance_befores[x]));
             access->second = it - contigs.begin();
             work_queue->add_work(it);
+            access.release();
           }
-          access.release();
         }
       }
       break;
-    }else if(candidates_after_num==1){ //only one candidate k-mer after
-      for(int x = 0; x<4; x++){
+    }else if(candidates_after_num==1){ //only one candidate k-mer after #Warning: circles
+      int x = 0;
+      for(x = 0; x<4; x++){
         if(candidates_after[x]){
-          current_kmer = current_kmer_fix+DNA_bases[x];
-          current_kmer_RC = RC_DNAbase(DNA_bases[x])+current_kmer_RC.substr(0, K-1);
-          contig_seq += DNA_bases[x];
-          abundances.push_back(kmer_abundance_afters[x]);
-          NTPC64('T', 'A', options.K, current_kmer_RC_hash, current_kmer_hash);
-          NTPC64('T', DNA_bases[x], options.K, current_kmer_hash, current_kmer_RC_hash);
           break;
         }
       }
-      continue;
+      current_kmer = current_kmer_fix+DNA_bases[x];
+          
+      if(current_kmer == first_kmer){//it is an pure circle
+        int contig_id = contigIter-contigs.begin();
+        if(!insert_or_replace(startKmer2unitig, DNAString(first_kmer), contig_id) || !insert_or_replace(startKmer2unitig, DNAString(current_kmer_RC), contig_id)){
+          contigIter->clear();
+        }else{
+          contigIter->median_abundance = median(abundances);
+        }
+        break;
+      }else{
+        current_kmer_RC = RC_DNAbase(DNA_bases[x])+current_kmer_RC.substr(0, K-1);
+        contig_seq += DNA_bases[x];
+        abundances.push_back(kmer_abundance_afters[x]);
+        NTPC64('T', 'A', options.K, current_kmer_RC_hash, current_kmer_hash);
+        NTPC64('T', DNA_bases[x], options.K, current_kmer_hash, current_kmer_RC_hash);
+        continue;
+      }
     }else if (nodes_after_num==1){//be careful about circles
-      current_kmer = current_kmer_fix + DNA_bases[node_after_x];
-      current_kmer_RC = RC_DNAbase(DNA_bases[node_after_x]) + current_kmer_RC.substr(0, K-1);
-      contig_seq += DNA_bases[node_after_x];
-      abundances.push_back(kmer_abundance_afters[node_after_x]);
-      NTPC64('T', 'A', options.K, current_kmer_RC_hash, current_kmer_hash);
-      NTPC64('T', DNA_bases[node_after_x], options.K, current_kmer_hash, current_kmer_RC_hash);
+      // current_kmer = current_kmer_fix + DNA_bases[node_after_x];
+      // current_kmer_RC = RC_DNAbase(DNA_bases[node_after_x]) + current_kmer_RC.substr(0, K-1);
+      // contig_seq += DNA_bases[node_after_x];
+      // abundances.push_back(kmer_abundance_afters[node_after_x]);
+      // NTPC64('T', 'A', options.K, current_kmer_RC_hash, current_kmer_hash);
+      // NTPC64('T', DNA_bases[node_after_x], options.K, current_kmer_hash, current_kmer_RC_hash);
+      if(!insert_or_replace(startKmer2unitig, DNAString(current_kmer_RC), (contigIter-contigs.begin()))){
+        contigIter->clear();
+      }else{
+        contigIter->median_abundance = median(abundances);
+      }
+      break;
     }else{ //stop
       if(!insert_or_replace(startKmer2unitig, DNAString(current_kmer_RC), (contigIter-contigs.begin()))){
         contigIter->clear();

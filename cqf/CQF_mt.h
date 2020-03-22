@@ -30,6 +30,7 @@
 #include "gqf.h"
 #include "base/multithread_io.h"
 #include "base/nthash.hpp"
+#include "base/global.h"
 #include "chunk.h"
 #include "reader.h"
 #include <mutex>
@@ -42,9 +43,9 @@
 using namespace std;
 using namespace kmercounting;
 
-enum CQF_MODE{EMPTY, FILEMAP, MEMORY};
-enum FILE_TYPE{FASTA, FASTQ};
-enum FILE_MODE{TEXT, GZIP, BZIP2};  
+// enum CQF_MODE{EMPTY, FILEMAP, MEMORY};
+// enum FILE_TYPE{FASTA, FASTQ};
+// enum FILE_MODE{TEXT, GZIP, BZIP2};  
 
 bool getFileReader(FILE_MODE fmode, const char* seq_file, reader* file_reader);
 
@@ -484,7 +485,7 @@ public:
   bool next_untraveled(){
     return qfi_next_untraveled(&qfi)?false:true;
   }
-  //return whether it is traveled(true) or untraveled(false) before setting
+  //return whether it is traveled(true) or untraveled(false) before setting. If the key doesn't exist, then false is returned.
   bool count_key_value_set_traveled(uint64_t key, uint64_t& count){
     return qf_count_key_value_set_traveled(qf, key, default_value, &count);
   }

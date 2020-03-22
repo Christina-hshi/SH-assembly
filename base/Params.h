@@ -12,6 +12,9 @@ struct Params{
   int solid_kmer_abundance_min;
   int solid_kmer_abundance_max;
 
+  //for extending unitigs
+  //int dis_deviation_max;//for contigs suggested to be connected by aligning reads (distance: x), they are not connected by the DBG iff we don't see the connection by searching for nodes within (x + max_dis_deviation) bp. 
+
   //input and output
   string readFileList;
   FILE_TYPE ftype;
@@ -45,7 +48,18 @@ struct Params{
   //atomic<int> STATS_repeat_num;
   //atomic<int> STATS_repeat_num_solvedBy_read;
   Params(){}
+  friend ostream& operator<<( ostream &output, const Params& params);
 };
+
+ostream& operator<<( ostream &output, const Params& params){
+  output<<"Params:"<<endl
+  <<"\tkmer size:                "<<params.K<<endl
+  <<"\tkmer min. abundance:      "<<params.kmer_abundance_min<<endl
+  <<"\tsolid kmer min. abundance:"<<params.solid_kmer_abundance_min<<endl
+  <<"\tsolid kmer max. abundance:"<<params.solid_kmer_abundance_max<<endl
+  <<"\tthreads:                  "<<params.thread_num<<endl;
+  return output; 
+}
 
 enum SeqLib_type{FR, RF, TT};
 

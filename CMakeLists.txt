@@ -30,9 +30,11 @@ set(CMAKE_C_FLAGS_RELEASE "${COMPILER_FLAGS} -Ofast")
 include_directories(${PROJECT_BINARY_DIR})
 
 # external libraries
-include_directories($ENV{WD}Tools/miniconda2/include)
-link_directories($ENV{WD}Tools/miniconda2/lib)
-link_directories(/usr/lib64)
+	include_directories($ENV{WD}Tools/miniconda2/include)
+	link_directories($ENV{WD}Tools/miniconda2/lib)
+	include_directories($ENV{CONDA_PREFIX}/include)
+	link_directories($ENV{CONDA_PREFIX}/lib)
+	link_directories(/usr/lib64)
 
 # check which compiler is used
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
@@ -55,6 +57,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 add_subdirectory(src)
 add_subdirectory(base)
 add_subdirectory(cqf)
+add_subdirectory(core)
 #add_subdirectory(CQF-deNoise)
 #add_subdirectory(contig)
 #add_subdirectory(cqf)

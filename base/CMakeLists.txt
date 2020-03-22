@@ -7,6 +7,7 @@ include_directories(${PROJECT_BINARY_DIR})
 add_library(base-objs OBJECT
 	Utility.cpp
 	global.cpp
+	DNA_string.cpp
 #	Hash.cpp
 #	MurmurHash2.cpp
 #	Fasta.cpp

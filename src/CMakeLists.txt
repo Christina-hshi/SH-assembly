@@ -2,10 +2,10 @@ include_directories(${PROJECT_SOURCE_DIR})
 include_directories(${PROJECT_BINARY_DIR})
 
 #gkm-lib
-set(SH-lib base-lib)
+set(SH-lib core-lib base-lib)
 
 add_executable(Contiger contig_assembly.cpp)
-target_link_libraries(Contiger cqf-core-lib base-lib z bz2 boost_system boost_thread boost_iostreams boost_program_options pthread rt boost_timer boost_chrono tbb)
+target_link_libraries(Contiger core-lib cqf-core-lib base-lib z bz2 boost_system boost_thread boost_iostreams boost_program_options pthread rt boost_timer boost_chrono tbb)
 
 add_executable(CQF-deNoise CQF-deNoise.cpp)
 target_link_libraries(CQF-deNoise cqf-core-lib base-lib z bz2 boost_system boost_thread boost_iostreams boost_program_options pthread rt boost_timer boost_chrono)

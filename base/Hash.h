@@ -1,4 +1,6 @@
 #pragma once
+#ifndef HASH_H
+#define HASH_H
 /**
 * For hashing the DNA sequence to generate fingerprint for each sequence, which are used to approximate sequence similarity
 */
@@ -17,7 +19,7 @@
 // 2. It will not produce the same results on little-endian and big-endian
 //    machines.    */
 
-uint32_t MurmurHash2 ( const void * key, int len, uint32_t seed=0 )
+inline uint32_t MurmurHash2 ( const void * key, int len, uint32_t seed=0 )
 {
   /* 'm' and 'r' are mixing constants generated offline.
      They're not really 'magic', they just happen to work well.  */
@@ -68,7 +70,7 @@ uint32_t MurmurHash2 ( const void * key, int len, uint32_t seed=0 )
   return h;
 } 
 
-uint32_t MurmurHash2 ( string seq, u_int seed=0){
+inline uint32_t MurmurHash2 ( string seq, u_int seed=0){
 	return MurmurHash2(seq.c_str(), seq.length(), seed);
 }
 
@@ -81,3 +83,5 @@ And store "sketch_size" smallest hash values in sketch.
 
 void MinHash_MurmurHash2_kmer(const string seq, int k, u_int seed, u_int* sketch, int sketch_size);
 */
+
+#endif
