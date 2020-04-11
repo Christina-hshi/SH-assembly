@@ -1,2 +1,5 @@
 debug/
 release/
+build/
+minia/
+test/

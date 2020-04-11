@@ -10,8 +10,8 @@ target_link_libraries(Contiger core-lib cqf-core-lib base-lib z bz2 boost_system
 add_executable(CQF-deNoise CQF-deNoise.cpp)
 target_link_libraries(CQF-deNoise cqf-core-lib base-lib z bz2 boost_system boost_thread boost_iostreams boost_program_options pthread rt boost_timer boost_chrono)
 
-add_executable(compare_contigs compare_contigs.cpp)
-target_link_libraries(compare_contigs cqf-core-lib base-lib boost_program_options)
+#add_executable(compare_contigs compare_contigs.cpp)
+#target_link_libraries(compare_contigs cqf-core-lib base-lib boost_program_options)
 
 #	#gkm-kernel
 #	add_executable(gkm-kernel main_calKernel.cpp)

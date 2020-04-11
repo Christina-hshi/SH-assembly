@@ -11,6 +11,10 @@ SET(CMAKE_FLAGS "-std=gnu++11")
 #set(COMPILER_FLAGS "-Wall -Ofast -m64 -Wno-unused-result -Wno-strict-aliasing -Wno-unused-function -Wno-sign-compare")
 set(COMPILER_FLAGS "-Wall -m64 -Wno-unused-result -Wno-strict-aliasing -Wno-unused-function -Wno-sign-compare")
 
+if (NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE RELEASE)
+endif()
+
 #set(CMAKE_CXX_FLAGS "${COMPILER_FLAGS} -pg -pthread -g")
 set(CMAKE_CXX_FLAGS_DEBUG "${COMPILER_FLAGS} -g")
 set(CMAKE_CXX_FLAGS_RELEASE "${COMPILER_FLAGS} -Ofast")
@@ -30,11 +34,11 @@ set(CMAKE_C_FLAGS_RELEASE "${COMPILER_FLAGS} -Ofast")
 include_directories(${PROJECT_BINARY_DIR})
 
 # external libraries
-	include_directories($ENV{WD}Tools/miniconda2/include)
-	link_directories($ENV{WD}Tools/miniconda2/lib)
-	include_directories($ENV{CONDA_PREFIX}/include)
-	link_directories($ENV{CONDA_PREFIX}/lib)
-	link_directories(/usr/lib64)
+#	include_directories($ENV{WD}Tools/miniconda2/include)
+#	link_directories($ENV{WD}Tools/miniconda2/lib)
+#	include_directories($ENV{CONDA_PREFIX}/include)
+#	link_directories($ENV{CONDA_PREFIX}/lib)
+#	link_directories(/usr/lib64)
 
 # check which compiler is used
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
