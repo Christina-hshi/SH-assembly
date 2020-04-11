@@ -1,3 +1,12 @@
+/*
+ * ============================================================================
+ *  
+ *        Authors: Christina SHI <hshi@cse.cuhk.edu.hk>
+ *                 Kevin Yip <kevinyip@cse.cuhk.edu.hk>
+ *
+ * ============================================================================
+ */
+
 #include "unitig_graph.h"
 
 bool load_unitig_graph(const string& file, concurrent_vector<Contig>& unitigs){

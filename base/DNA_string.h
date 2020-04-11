@@ -1,3 +1,12 @@
+/*
+ * ============================================================================
+ *  
+ *        Authors: Christina SHI <hshi@cse.cuhk.edu.hk>
+ *                 Kevin Yip <kevinyip@cse.cuhk.edu.hk>
+ *
+ * ============================================================================
+ */
+
 #pragma once
 
 #ifndef DNA_STRING_H

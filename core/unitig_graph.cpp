@@ -1,3 +1,15 @@
+/*
+ * ============================================================================
+ *  Filename:  unitig_graph.cpp
+ *  
+ *  Codes by
+ *    "SH-assembly"
+ *        Authors: Christina SHI <hshi@cse.cuhk.edu.hk>
+ *                 Kevin Yip <kevinyip@cse.cuhk.edu.hk>
+ *        
+ * ============================================================================
+ */
+
 #include "unitig_graph.h"
 
 string UnitigNode::to_str() const{

@@ -1,3 +1,12 @@
+/*
+ * ============================================================================
+ *  
+ *        Authors: Christina SHI <hshi@cse.cuhk.edu.hk>
+ *                 Kevin Yip <kevinyip@cse.cuhk.edu.hk>
+ *
+ * ============================================================================
+ */
+
 #include "DNA_string.h"
 
 DNAString::DNAString():_dna_base_num(0), _offset(0){}

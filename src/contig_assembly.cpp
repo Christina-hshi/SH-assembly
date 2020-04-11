@@ -1,3 +1,15 @@
+/*
+ * ============================================================================
+ *  Filename:  contig_assembly.cpp
+ *  
+ *  Codes by
+ *    "SH-assembly"
+ *        Authors: Christina SHI <hshi@cse.cuhk.edu.hk>
+ *                 Kevin Yip <kevinyip@cse.cuhk.edu.hk>
+ *        
+ * ============================================================================
+ */
+
 #define GRAPH_TRAVERSE
 
 #include "cqf/CQF_mt.h"

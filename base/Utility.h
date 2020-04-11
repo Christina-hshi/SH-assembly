@@ -1,4 +1,13 @@
-/* implementing generic functions
+/*
+ * ============================================================================
+ *  
+ *        Authors: Christina SHI <hshi@cse.cuhk.edu.hk>
+ *                 Kevin Yip <kevinyip@cse.cuhk.edu.hk>
+ *
+ * ============================================================================
+ */
+
+/* implementing basic functions
 */
 
 #pragma once

@@ -1,3 +1,12 @@
+/*
+ * ============================================================================
+ *  
+ *        Authors: Christina SHI <hshi@cse.cuhk.edu.hk>
+ *                 Kevin Yip <kevinyip@cse.cuhk.edu.hk>
+ *
+ * ============================================================================
+ */
+
 #ifndef _VECTOR_MT_H
 #define _VECTOR_MT_H
 #include<vector>

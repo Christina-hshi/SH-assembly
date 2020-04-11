@@ -1,3 +1,19 @@
+/*
+ * ============================================================================
+ *  Filename:  gqf.h
+ *  
+ *  Mixture of codes by
+ *    "CQF-deNoise"
+ *        Authors: Christina SHI <hshi@cse.cuhk.edu.hk>
+ *                 Kevin Yip <kevinyip@cse.cuhk.edu.hk>
+ *        
+ *    "A General-Purpose Counting Filter: Making Every Bit Count"    
+ *        Authors:  Prashant Pandey <ppandey@cs.stonybrook.edu>
+ *                  Rob Johnson <robj@vmware.com>   
+ *
+ * ============================================================================
+ */
+
 #pragma once
 
 #include <iostream>

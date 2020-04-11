@@ -1,3 +1,15 @@
+/*
+ * ============================================================================
+ *  Filename:  CQF-deNoise.cpp
+ *  
+ *  Codes by
+ *    "CQF-deNoise"
+ *        Authors: Christina SHI <hshi@cse.cuhk.edu.hk>
+ *                 Kevin Yip <kevinyip@cse.cuhk.edu.hk>
+ *        
+ * ============================================================================
+ */
+
 #define GRAPH_TRAVERSE
 
 #include "cqf/CQF_mt.h"

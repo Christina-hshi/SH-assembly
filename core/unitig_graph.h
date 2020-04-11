@@ -1,3 +1,15 @@
+/*
+ * ============================================================================
+ *  Filename:  unitig_graph.h
+ *  
+ *  Codes by
+ *    "SH-assembly"
+ *        Authors: Christina SHI <hshi@cse.cuhk.edu.hk>
+ *                 Kevin Yip <kevinyip@cse.cuhk.edu.hk>
+ *        
+ * ============================================================================
+ */
+
 #pragma once
 
 #include "base/global.h"

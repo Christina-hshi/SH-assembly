@@ -1,3 +1,12 @@
+/*
+ * ============================================================================
+ *  
+ *        Authors: Christina SHI <hshi@cse.cuhk.edu.hk>
+ *                 Kevin Yip <kevinyip@cse.cuhk.edu.hk>
+ *
+ * ============================================================================
+ */
+
 #include "Utility.h"
 
 size_t NGx(vector<size_t> seq_lens, int x, int ref_len){
