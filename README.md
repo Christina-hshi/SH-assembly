@@ -27,8 +27,8 @@ Here we provide the modification upon Minia 3 (v3 git commit n3eb6f54), using wh
     git clone https://github.com/Christina-hshi/Minia.git
     cd Minia
     git submodule init
-    git submodule update
-    mkdir release
+    git submodule update --remote
+		mkdir release
     cd release
     cmake ..
     make -j8
