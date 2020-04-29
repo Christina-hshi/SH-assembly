@@ -7,7 +7,7 @@ In the original Minia 3 program, we can not directly call its simplication modul
 Here we provide the modification upon Minia 3 (v3 git commit n3eb6f54), using which we can directly call the simplification module.
 
 ## External libraries
-- **z**
+- **z**    (at least 1.2.3.5)
 - **bz2**
 - **boost**
 - **tbb**
@@ -28,7 +28,7 @@ Here we provide the modification upon Minia 3 (v3 git commit n3eb6f54), using wh
     cd Minia
     git submodule init
     git submodule update --remote
-		mkdir release
+    mkdir release    
     cd release
     cmake ..
     make -j8
