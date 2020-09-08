@@ -25,8 +25,8 @@ Params get_opts(int argc, char* argv[]){
   po::options_description desc(string(argv[0])+"  <options>\nOptions:");
   desc.add_options() 
     ("help,h", "print help messages") 
-    (",k", po::value<int>()->required(), "kmer length") 
-    ("input,i", po::value<string>()->required(), "a file containing list of input file name(s), should be absolute address or file names when in the running directory.")
+    (",k", po::value<int>()->required(), "k-mer size") 
+    ("input,i", po::value<string>()->required(), "a file containing a list of read file name(s), should be absolute address if the read files are not in the running directory")
     ("format,f", po::value<char>()->default_value('f'), "format of the input: g(gzip); b(bzip2); f(plain fastq)")
     ("cqf,c", po::value<string>()->required(), "the counting quotient filter built with the same 'k'")
     ("abundance_min,s", po::value<int>()->default_value(2), "minimum coverage of k-mers used to extend the assembly") 
