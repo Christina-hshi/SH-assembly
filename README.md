@@ -36,7 +36,7 @@ Here we provide the modification upon Minia 3 (v3 git commit n3eb6f54), using wh
 ## User mannual
 The basic workflow to run SH-assembly is 
 
-1. run **CQF-deNoise** to counting kmers. The manual of CQF-deNoise is [here]{https://github.com/Christina-hshi/CQF-deNoise.git}.
+1. run **CQF-deNoise** to counting kmers. The manual of CQF-deNoise is [here](https://github.com/Christina-hshi/CQF-deNoise.git).
 2. run **Contiger** to building unitig graph 
 3. run **Minia** to simplify unitig graph, and produce a list of contigs.
 
