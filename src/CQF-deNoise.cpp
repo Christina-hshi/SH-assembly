@@ -17,17 +17,17 @@
 
 boost::program_options::variables_map get_opts(int argc, char* argv[]){
   namespace po = boost::program_options;
-  po::options_description desc(string(argv[0])+"  <options>\nOptions:");
+  po::options_description desc(string(argv[0])+"  <options>\nOptions");
   desc.add_options() 
     ("help,h", "print help messages") 
-    (",k", po::value<int>()->required(), "kmer length") 
-    ("trueKmer,n", po::value<uint64_t>()->required(), "number of true(or non singleton) k-mers")
-    (",N", po::value<uint64_t>()->required(), "total number of k-mers to process")
-    ("alpha,e", po::value<double>()->default_value(-1), "provide estimated base error rate of data for allocation of memory.")
-    ("errorProfile", po::value<string>()->default_value(""), "error profile, each line with error rate for corresponding base.")
-    ("fr", po::value<double>()->default_value(0), "overall probability of removing non-singleton true k-mers, default: 1/#trueKmer")
-    ("deNoise", po::value<int>()->default_value(-1), "number of times the deNoise is called, when specified, 'fr' is ignored.")
-    ("endDeNoise", po::bool_switch()->default_value(false), "call deNoise after processing all the k-mers(not counted into the #deNoise)")
+    (",k", po::value<int>()->required(), "k-mer size") 
+    ("trueKmer,n", po::value<uint64_t>()->required(), "number of unique true k-mers")
+    (",N", po::value<uint64_t>()->required(), "total number of k-mers")
+    ("alpha,e", po::value<double>()->default_value(-1), "average base error rate, when specified, the <errorProfile> is ignored")
+    ("errorProfile", po::value<string>()->default_value(""), "error profile in a file, each line with error rate for the corresponding base, e.g. the error rate of the second base is specified in the second line")
+    ("fr", po::value<double>()->default_value(0), "tolerable rate of true k-mers being wrongly removed, default: 1/<trueKmer>")
+    ("deNoise", po::value<int>()->default_value(-1), "number of rounds of deNoise, when specified, the <fr> is ignored")
+    ("endDeNoise", po::bool_switch()->default_value(false), "call deNoise after processing all the k-mers (not counted into the <deNoise>)")
     (",t", po::value<int>()->default_value(16), "number of threads")
     ("format,f", po::value<char>()->required(), "format of the input: g(gzip); b(bzip2); f(plain fastq)")
     ("input,i", po::value<string>()->required(), "a file containing list of input file name(s), should be in the same directory as the fastq file(s)")
@@ -35,11 +35,16 @@ boost::program_options::variables_map get_opts(int argc, char* argv[]){
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);
   
-  if (argc==1 || vm.count("help") || (!vm.count("alpha") && !vm.count("errorProfile"))) {
+  //if (argc==1 || vm.count("help") || (!vm.count("alpha") && !vm.count("errorProfile"))) {
+  if (argc==1 || vm.count("help")) {
+    cerr << endl << desc << "\n";
+    exit(0);
+  }
+  if (vm["alpha"].as<double>()==-1 && vm["errorProfile"].as<string>()=="") {
+    cerr<<endl<<"Please specify either <alpha> or <errorProfile>"<<endl<<endl;
     cerr << desc << "\n";
     exit(0);
   }
-  
   po::notify(vm);
 
   return vm;
