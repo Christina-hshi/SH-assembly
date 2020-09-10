@@ -188,10 +188,10 @@ int main(int argc, char* argv[]){
     <<"thread_num: "<<thread_num<<endl
     <<"K: "<<K<<endl
     <<"number of true k-mers: "<<n_true_kmers<<endl
-    <<"desired overall false removal probability: "<<fr<<endl
-    <<"number of times deNoise being called: "<<num_deNoise<<endl
+    <<"tolerable wrong removal rate: "<<fr<<endl
+    <<"number of deNoise rounds: "<<num_deNoise<<endl
     <<"deNoise after processing all k-mers: "<<(end_deNoise?"true":"false")<<endl
-    <<"number of distinct k-mers triggering deNoise: "<<n_distinct_elts_for_DeNoise<<endl;
+    <<"number of unique k-mers triggering deNoise: "<<n_distinct_elts_for_DeNoise<<endl;
     /*
     cerr<<"#true_kmers(unique)/#true_kmers(in total): "<<n_true_kmers<<"/"<<num_true_kmers<<"("<<num_true_kmers/n_true_kmers<<")"<<endl;
     cerr<<"#false_kmers: "<<num_false_kmers<<endl;
@@ -200,14 +200,14 @@ int main(int argc, char* argv[]){
     cerr<<"#deNoise rounds: "<<num_deNoise<<endl;
     cerr<<"Final wrong removal rate: "<<cdfpoi_positive(num_deNoise, num_true_kmers/n_true_kmers)<<endl;
     */
-    cerr<<"#deNoise rounds leading to the same size of CQF: ["<<num_deNoise_lower_bound<<", "<<num_deNoise_upper_bound<<"]"<<endl;
-    cerr<<"Wrong removal rate leading to same #deNoise rounds: ["<<cdfpoi_positive(num_deNoise_lower_bound, num_true_kmers/n_true_kmers)<<", ";
+    cerr<<"#deNoise rounds leading to the same size of CQF: ["<<num_deNoise_lower_bound<<", "<<(num_deNoise_upper_bound==0?"+oo":to_string(num_deNoise_upper_bound))<<"]"<<endl;
+    cerr<<"wrong removal rate leading to the same #deNoise rounds: ["<<cdfpoi_positive(num_deNoise_lower_bound, num_true_kmers/n_true_kmers)<<", ";
     if(num_deNoise_upper_bound == 0){
-      cerr<<"+oo";
+      cerr<<"1";
     }else{
       cerr<<cdfpoi_positive(num_deNoise_upper_bound, num_true_kmers/n_true_kmers);
     }
-    cerr<<"]"<<endl;
+    cerr<<"]"<<endl<<endl;
 
   CQF_mt cqf_mt(qb, hb, thread_num, seed);
   

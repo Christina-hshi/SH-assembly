@@ -247,7 +247,7 @@ DNAString DNAString::substr(size_t start_pos, size_t len) const{
 	for(int x = 0; x<len%4; x++){
 		mask |= DNA::base_mask[x];
 	}
-	data[data_slot_idx-1] &= mask;//reset the rest of the bits
+	if(len%4) data[data_slot_idx-1] &= mask;//reset the rest of the bits
 
 	return DNAString(data, len);
 }
