@@ -73,29 +73,29 @@ If you have no idea about the error rate or the error profile of the sequencing 
 And then by taking k-mers with low counts (e.g. singletons or k-mers with counts <=2, depending on the sequencing depth) as potential false k-mers and the rest of the k-mers as true k-mers, you can estimate an average base error rate by computing ```1 - (T/N)^(1/k)```, where ```T``` is the total number of true k-mers (please notice that ```T``` is not ```<n>```). 
 If you don't know the number of unique true k-mers (```<n>```), you can use the number of k-mers with enough occurrence counts (e.g. >=2 or >=3) as an approximation, or you can use the size of the genome as the approximation of the number of unique true k-mers (```<n>```). 
 
-Following is an example of how to set the parameters to run CQF-deNoise based on the k-mer frequency histogram estimated by ntCard to count the 28-mers in a C.elegans data set.
+Following is an example of how to set the parameters to run CQF-deNoise based on the k-mer frequency histogram estimated by ntCard to count the 47-mers in a C.elegans data set.
 
-The output of the ntCard (run with '-k28') contains 
+The output of the ntCard (run with '-k47') contains 
 ```
-F1      22238370946 #this is the total number of k-mers <N>
-F0      2004956528  #this is the total number of unique k-mers
-f1      1852352895  #this is the number of unique k-mers occuring once
-f2      34025186    #this is the number of unique k-mers occuring twice
-f3      7174180
+F1      16506371070 #this is the total number of k-mers <N>
+F0      1810841770  #this is the total number of unique k-mers
+f1      1665561610  #this is the number of unique k-mers occuring once
+f2      26122317    #this is the number of unique k-mers occuring twice
+f3      6172811
 f<x>      ....
 ```
 
 Based on the output of the ntCard, we can set 
 ```
-N = F1 = 22238370946
-n = F0 - f1 - f2 = 118578447 (which is similar to the size of the C.elegans genome, ~100 Mb)
-e = 1 - ((F1 - f1 - 2*f2)/F1)^(1/28) = 0.00322
+N = F1 = 16506371070
+n = F0 - f1 - f2 = 119157843 (which is similar to the size of the C.elegans genome, ~100 Mb)
+e = 1 - ((F1 - f1 - 2*f2)/F1)^(1/k) = 0.00234
 ```
 Please notice that in this example, we consider k-mers with counts <= 2 as potential false k-mers, since the sequencing depth of our data is very high (>100x). If you are using a data set of low sequencing depth, we recommmed you consider only singleton k-mers as potential false k-mers to estimate the values of parameters as stated above.
 
 For this example, we can run
 ```
-./CQF-deNoise -k 28 -N 22238370946 -n 118578447 -e 0.00322 -i ReadFiles.txt -o k28.cqf
+./CQF-deNoise -k 47 -N 16506371070 -n 119157843 -e 0.00234 -i ReadFiles.txt -o k47.cqf
 ```
 
 CQF-deNoise can save a lot of space especially when the sequencing depth is high or there are a huge number of false k-mers. When the data set is of low sequencing depth or contains only a few number of false k-mers, we recommend you run CQF-deNoise without removing any k-mers by setting ```--deNoise=0```.
@@ -127,7 +127,7 @@ Options::
 
 For example, we can run
 ```
-./Contiger -k 28 -i ReadFiles.txt -c k28.cqf -o unitigs.fa
+./Contiger -k 47 -i ReadFiles.txt -c k47.cqf -o unitigs.fa
 ```
 
 #### step 3: run "Minia" to simplify unitig graph and produce contigs
@@ -135,7 +135,7 @@ Detailed manual to run Minia can be found [here](https://github.com/GATB/minia.g
 
 For example, we can run
 ```
-./minia -kmer-size 28 -unitig -in unitigs.fa
+./minia -kmer-size 47 -unitig -in unitigs.fa
 ```
 
 ## Contact
