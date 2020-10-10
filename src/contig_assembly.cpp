@@ -180,6 +180,8 @@ void get_unitig_forward(CQF_mt& cqf, const Params& options, concurrent_vector<Co
 //void get_unitig_backward(CQF_mt& cqf, const Params& params, vector_mt<string>& contigs, unordered_map_mt<string, int>& startKmer2unitig, WorkQueue* work_queue, int contig_id);
 //void get_unitig_backward(CQF_mt& cqf, const Params& options, vector_mt<Contig>& contigs, unordered_map_mt<string, int>& startKmer2unitig, WorkQueue* work_queue, int contig_id);
 
+void check_unitig(const Params& options, concurrent_vector<Contig>& contigs, const hash_map_mt& startKmer2unitig, WorkQueue2* work_queue);
+
 void track_kmer_worker(const Params& options, const concurrent_vector<Contig>& contigs, hash_map_mt& startKmer2unitig, WorkQueue2* work_queue);
 void build_graph_worker(const Params& options, const concurrent_vector<Contig>& contigs, const hash_map_mt& startKmer2unitig, concurrent_vector<UnitigNode>& unitigNodes, WorkQueue2* work_queue);
 void build_graph_worker_continue(const Params& options, const concurrent_vector<Contig>& contigs, const hash_map_mt& startKmer2unitig, concurrent_vector<UnitigNode>& unitigNodes, WorkQueue2* work_queue, const int& last_batch_end_idx);
@@ -268,9 +270,29 @@ int main(int argc, char* argv[]){
   contigs.resize(1);
   hash_map_mt startKmer2unitig;
   find_unitigs_mt_master(cqf_mt, seqFiles, options, contigs, startKmer2unitig);
-  
-  WorkQueue2* work_queue4trace_kmer = new WorkQueue2(1, 10, 1);
+
+  //Make sure that there is no duplicate seq.
+  DisplayCurrentDateTime();
+  cout<<"[Check] make sure that there is no duplicate seq."<<endl<<std::flush;
+  WorkQueue2* work_queue4check_unitig = new WorkQueue2(1, 10, 1);
   boost::thread_group prod_threads;
+  for(int t = 0; t<options.thread_num; t++){
+    prod_threads.add_thread(new boost::thread(check_unitig, boost::ref(options), boost::ref(contigs), boost::ref(startKmer2unitig), work_queue4check_unitig));
+  }
+  prod_threads.join_all();
+  free(work_queue4check_unitig);
+  // vector<bool> contig_notDup(contigs.size(), false);
+  // for(auto kmer2unitig : startKmer2unitig){
+  //   contig_notDup[kmer2unitig.second]=true;
+  // }
+  // for(int x = 1; x < contigs.size(); x++){
+  //   if(contigs[x].seq.dna_base_num()>0 && !contig_notDup[x]){
+  //     contigs[x].clear();
+  //   }
+  // }
+
+  WorkQueue2* work_queue4trace_kmer = new WorkQueue2(1, 10, 1);
+  // boost::thread_group prod_threads;
   for(int t = 0; t<options.thread_num; t++){
     prod_threads.add_thread(new boost::thread(track_kmer_worker, boost::ref(options), boost::ref(contigs), boost::ref(startKmer2unitig), work_queue4trace_kmer));
   }
@@ -279,6 +301,7 @@ int main(int argc, char* argv[]){
   cout<<"[Unitig] "<<work_queue4trace_kmer->assemblyInfo_.seq_num_<<" unitigs reported of length "<<work_queue4trace_kmer->assemblyInfo_.seq_len_in_total_<<" bp in total"<<endl;
   cout<<"[Unitig] among them, there are "<<work_queue4trace_kmer->assemblyInfo_.palindrome_seq_num_<<" palindromes."<<endl;
   free(work_queue4trace_kmer);
+
 //*/
 
   //check whether can reconstruct the full sequences from the graph.
@@ -763,7 +786,7 @@ if(false){
   fout.close();
 }
 */
-
+  cout<<"[Dump] saved!"<<endl;
   DisplayCurrentDateTime();  
   //contig_summary(contigs);
   return 0;
@@ -909,6 +932,26 @@ void track_kmer_worker(const Params& options, const concurrent_vector<Contig>& c
   work_queue->assemblyInfo_.seq_len_in_total_ += totalUnitigs_len;
 }
 */
+void check_unitig(const Params& options, concurrent_vector<Contig>& contigs, const hash_map_mt& startKmer2unitig, WorkQueue2* work_queue){
+  int start, end, counter;
+  DNAString first_kmer;
+  while(work_queue->get_work(contigs, start, end, counter)){
+    for(size_t contig_id = start; contig_id < end; contig_id++){
+      if(contigs[contig_id].seq.dna_base_num()!=0){
+        first_kmer = contigs[contig_id].seq.substr(0,options.K);
+        hash_map_mt::const_accessor access;
+        if(startKmer2unitig.find(access, first_kmer)){
+          if(access->second != contig_id){
+            contigs[contig_id].clear();
+          }
+          access.release();
+        }else{
+          cerr<<"[Error] kmer not found!"<<endl;
+        }
+      }
+    }
+  }
+}
 
 void track_kmer_worker(const Params& options, const concurrent_vector<Contig>& contigs, hash_map_mt& startKmer2unitig, WorkQueue2* work_queue){
   int start, end, counter, totalUnitigs_len, seq_num, palindrome_contig_num;
@@ -944,14 +987,14 @@ void track_kmer_worker(const Params& options, const concurrent_vector<Contig>& c
           // startKmer2unitig.insert(access, last_kmer_RC);
           // access->second = -counter;
           // access.release();
-          if(startKmer2unitig.find(access, first_kmer)){
-            access->second = counter;
+          if(startKmer2unitig.find(access, last_kmer_RC)){
+            access->second = -counter;
             access.release();
           }else{
             cerr<<"[Error] kmer not found!"<<endl;
           }
-          if(startKmer2unitig.find(access, last_kmer_RC)){
-            access->second = -counter;
+          if(startKmer2unitig.find(access, first_kmer)){
+            access->second = counter;
             access.release();
           }else{
             cerr<<"[Error] kmer not found!"<<endl;
@@ -1818,6 +1861,8 @@ void processDataChunk(CQF_mt& cqf, const Params& options, concurrent_vector<Cont
 
     if(middle <= seq_len- options.K){
       kmer = seq.substr(middle, options.K);
+      to_upper_DNA(kmer);
+
       if(kmer.find_first_of("nN")!=string::npos){
         continue;
       }
@@ -1830,31 +1875,46 @@ void processDataChunk(CQF_mt& cqf, const Params& options, concurrent_vector<Cont
       }
 
       auto iter = contigs.push_back(Contig(kmer, kmer_count));
-      to_upper_DNA(kmer);
       
       size_t contig_id = iter - contigs.begin(); //std::distance(contigs.begin(), iter);
-      bool is_dup = false;
-      for(int x = 0; x<4; x++){
-        if(kmer == string(options.K, DNA::bases[x])){
-          hash_map_mt::accessor access;
-          if(startKmer2unitig.insert(access, DNAString(kmer))){
-            access->second = contig_id;
-          }else{
-            is_dup = true;
-          }
-          break;
-        }
-      }
-      //startKmers.insert(DNAString(kmer));//fake id 
-      if(is_dup){
-        continue;
-      }
+      // bool is_dup = false;
+      // for(int x = 0; x<4; x++){
+      //   if(kmer == string(options.K, DNA::bases[x])){
+      //     hash_map_mt::accessor access;
+      //     if(startKmer2unitig.insert(access, DNAString(kmer))){
+      //       access->second = contig_id;
+      //     }else{
+      //       is_dup = true;
+      //     }
+      //     break;
+      //   }
+      // }
+      // //startKmers.insert(DNAString(kmer));//fake id 
+      // if(is_dup){
+      //   continue;
+      // }
 
       get_unitig_forward(cqf, options, contigs, startKmer2unitig, work_queue, iter);
+
+      hash_map_mt::const_accessor const_access;
       if(iter->seq.dna_base_num() > 0){
-        iter->seq.RC() ;
-        get_unitig_forward(cqf, options, contigs, startKmer2unitig, work_queue, iter);
+        if(startKmer2unitig.find(const_access, DNAString(kmer))){
+          if(const_access->second > contig_id){
+            iter->seq.RC(); const_access.release();
+            get_unitig_forward(cqf, options, contigs, startKmer2unitig, work_queue, iter);    
+          }else if(const_access->second < contig_id){
+            iter->clear(); const_access.release();
+          }
+          // const_access.release();
+        }else{
+          iter->seq.RC();
+          get_unitig_forward(cqf, options, contigs, startKmer2unitig, work_queue, iter);
+        }
       }
+      // if(iter->seq.dna_base_num() > 0){
+      //   iter->seq.RC() ;
+      //   get_unitig_forward(cqf, options, contigs, startKmer2unitig, work_queue, iter);
+      // }
     }
     //skip two lines
     dataChunk.skipLines(2);
@@ -2062,12 +2122,12 @@ void find_unitigs_mt_master(CQF_mt& cqf, seqFile_batch& seqFiles, const Params& 
         if(iter->seq.dna_base_num() > 0){
           if(startKmer2unitig.find(const_access, DNAString(kmer))){
             if(const_access->second > contig_id){
-              iter->seq.RC();
+              iter->seq.RC(); const_access.release();
               get_unitig_forward(cqf, options, contigs, startKmer2unitig, work_queue, iter);    
             }else if(const_access->second < contig_id){
-              iter->clear();
+              iter->clear(); const_access.release();
             }
-            const_access.release();
+            // const_access.release();
           }else{
             iter->seq.RC();
             get_unitig_forward(cqf, options, contigs, startKmer2unitig, work_queue, iter);
@@ -2100,12 +2160,12 @@ void find_unitigs_mt_master(CQF_mt& cqf, seqFile_batch& seqFiles, const Params& 
       //std::this_thread::sleep_for(std::chrono::milliseconds(1000));//sleep for 1 seconds  
     //}
   }
-  while(work_queue->total_work > work_queue->work_done){
+  while(work_queue->work_done < work_queue->total_work){//total_work on the right is important.
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
   }
   work_queue->master_done = true;
   prod_threads.join_all();
-
+  assert(work_queue->total_work == work_queue->work_done);
   free(work_queue);
   //contigs.insert(contigs.end(), master_contigs.begin(), master_contigs.end());
   //startKmer2unitig.clear();
@@ -2194,7 +2254,7 @@ void find_unitigs_mt_worker(CQF_mt& cqf, seqFile_batch& seqFiles, const Params& 
 void find_unitigs_mt_worker(CQF_mt& cqf, seqFile_batch& seqFiles, const Params& options, concurrent_vector<Contig>& contigs, hash_map_mt& startKmer2unitig, WorkQueue* work_queue){
   concurrent_vector<Contig>::iterator contigIter;
   chunk dataChunk;
-  while(!work_queue->master_done){
+  while(!work_queue->master_done || (work_queue->work_done < work_queue->total_work)){
     if(!work_queue->get_next_work(contigIter)){
       if(seqFiles.getDataChunk(dataChunk)){
         processDataChunk(cqf, options, contigs, startKmer2unitig, work_queue, dataChunk);
@@ -3086,8 +3146,8 @@ void get_unitig_forward(CQF_mt& cqf, const Params& options, concurrent_vector<Co
             auto it = contigs.push_back(Contig(kmer, kmer_abundance_afters[x]));
             access->second = it - contigs.begin();
             work_queue->add_work(it);
-            access.release();
           }
+          access.release();
         }
       }
       kmer = current_kmer_RC;
@@ -3099,8 +3159,8 @@ void get_unitig_forward(CQF_mt& cqf, const Params& options, concurrent_vector<Co
             auto it = contigs.push_back(Contig(kmer, kmer_abundance_befores[x]));
             access->second = it - contigs.begin();
             work_queue->add_work(it);
-            access.release();
           }
+          access.release();
         }
       }
       break;
