@@ -1857,9 +1857,9 @@ void processDataChunk(CQF_mt& cqf, const Params& options, concurrent_vector<Cont
     }
 
     int seq_len = seq.length();
-    int middle = seq_len/2;
+    int middle = seq_len/2 - options.K/2;
 
-    if(middle <= seq_len- options.K){
+    if(seq_len>=options.K and middle <= seq_len- options.K){
       kmer = seq.substr(middle, options.K);
       to_upper_DNA(kmer);
 
