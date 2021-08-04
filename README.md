@@ -10,7 +10,7 @@ Here we provide a customized version of Minia (v3 git commit n3eb6f54), using wh
 - **z**    (at least 1.2.3.5)
 - **bz2**
 - **boost**
-- **tbb**   (tested with version `2019.7`, which can be installed with [conda](https://anaconda.org/conda-forge/tbb/files?version=2019.7&page=2&type=conda) `conda install -c conda-forge tbb=2019.7`)
+- **tbb**   (tested with version `2019.7`, which can be installed with [conda](https://anaconda.org/conda-forge/tbb/files?version=2019.7&page=2&type=conda) `conda install -c conda-forge tbb=2019.7`). Version `2020.3` also worked (reported by Stephan in the issue [#5](https://github.com/Christina-hshi/SH-assembly/issues/5))
 
 ## Installation
     git clone https://github.com/Christina-hshi/SH-assembly.git
